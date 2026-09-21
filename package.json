@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p packages/core/tsconfig.build.json",
+    "build": "tsc -p packages/core/tsconfig.build.json && tsc -p packages/dsh/tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "check:corpus": "tsx packages/corpus/src/cli.ts check && tsx packages/corpus/src/cli.ts check packages/pi/test/recorded",

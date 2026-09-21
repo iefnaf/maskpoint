@@ -1,0 +1,66 @@
+{
+  "name": "@maskpoint/dsh",
+  "version": "0.0.0",
+  "description": "Maskpoint as a DSH compaction backend: observation masking behind the host's compaction seam.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@maskpoint/core": "0.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-commands": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-token-meter": "^0.1.0-rc.8"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis-plugin-group": "^1.0.2",
+    "@deepseek-ai/cordis-plugin-include": "^1.0.7",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.3",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-attachment": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-command-compact": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-commands": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction-basic": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-session-projection": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.8",
+    "js-yaml": "^4.3.2"
+  }
+}
