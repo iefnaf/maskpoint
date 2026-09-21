@@ -145,7 +145,7 @@ export interface ModelRequest {
   model?: string
   /** What to produce and in what format. */
   instructions: string
-  /** The candidate: accumulated masked history, never the original observation bodies. */
+  /** The candidate: previous state plus newly evicted masked history, never original observation bodies. */
   input: string
   /** The generation cap. A response cut off by it is rejected. */
   maxOutputTokens: number
@@ -197,7 +197,13 @@ export type DeclineReason =
 
 export type Outcome =
   /** `checkpointRejection` is set when a checkpoint was attempted and this is the fallback. */
-  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats; checkpointRejection?: CheckpointRejection }
+  | {
+      kind: 'masked-history'
+      artifact: Artifact
+      detail: EngineDetail
+      stats: Stats
+      checkpointRejection?: CheckpointRejection
+    }
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 

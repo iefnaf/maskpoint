@@ -37,8 +37,9 @@ function candidateText(previous: string | undefined, evicted: readonly Item[]): 
 }
 
 /**
- * The candidate text of a masked-history artifact: exactly what `candidateTokens` measured when the
- * budget was decided, so a checkpoint call is fed the very text the budget compared.
+ * The candidate text of an artifact `decide` assembled (previous state, then masked history): exactly
+ * what `candidateTokens` measured when the budget was decided, so a checkpoint call is fed the very
+ * text the budget compared.
  */
 export function artifactCandidateText(artifact: Artifact): string {
   const previous = artifact.sections.find((section) => section.kind === 'checkpoint')

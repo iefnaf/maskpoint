@@ -1,5 +1,5 @@
 export { payloadOf } from './candidate.js'
-export { CHECKPOINT_SECTIONS, checkpointInstructions } from './checkpoint.js'
+export { CHECKPOINT_SECTIONS } from './checkpoint.js'
 export type { CheckpointRequest, Decision } from './decide.js'
 export { decide } from './decide.js'
 export { estimateTokens } from './estimate.js'

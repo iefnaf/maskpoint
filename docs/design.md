@@ -158,7 +158,8 @@ interface EngineDetail {            // persisted; never contains observation bod
 }
 
 type Outcome =
-  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats }
+  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats
+      checkpointRejection?: 'provider-error' | 'aborted' | 'truncated' | 'empty' | 'tool-call' }  // set when a checkpoint was tried and rejected
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 ```
@@ -206,7 +207,7 @@ function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
 // items once accumulation has dropped what earlier state already represents.
 
 interface EngineDeps {
-  complete(request: ModelRequest): Promise<ModelResponse>   // the host's model call: the only I/O
+  complete(request: ModelRequest): Promise<ModelResponse>   // injected by the adapter; the core itself does no I/O
   newRoutingId(): string                                    // fresh identity, asked for once per checkpoint call
   signal: CancellationSignal                                // the host's signal, carried into the request
   checkpoint: { maxOutputTokens: number; model?: string }   // model absent = the session model

@@ -37,6 +37,23 @@ const fixture = (name: string): CorpusFixture => {
   return found
 }
 
+/**
+ * The original bodies that masking dropped from the span: observations whose text did not survive
+ * into the masked item. (An image observation keeps small text metadata beside its image note and
+ * loses only the payload, so it drops no body; a media-only one has none.) Compared whole, not by
+ * prefix: preserved tool-call arguments may legitimately repeat the start of a body.
+ */
+const droppedBodies = (snapshot: ConversationSnapshot, masked: MaskedHistoryOutcome): string[] => {
+  const originals = new Map(snapshot.items.map((item) => [item.id, item] as const))
+  const maskedNow = masked.artifact.sections.flatMap((section) => (section.kind === 'masked-history' ? section.items : []))
+  return maskedNow.flatMap((item) => {
+    const original = originals.get(item.id)
+    if (original?.kind !== 'tool-result' || item.kind !== 'tool-result' || !item.masked || original.masked) return []
+    if (!original.text || (item.text ?? '').includes(original.text)) return []
+    return [original.text]
+  })
+}
+
 const checkpointOf = (outcome: Outcome) => {
   if (outcome.kind !== 'checkpoint') throw new Error(`expected checkpoint, got ${outcome.kind}`)
   return outcome
@@ -118,18 +135,17 @@ describe.each(everyFixture)('the checkpoint path over the %s fixture', (_name, e
     expect(estimateTokens(input)).toBe(fallback.stats.candidateTokens)
     if (plain.previousCheckpoint !== undefined) expect(input.startsWith(plain.previousCheckpoint)).toBe(true)
 
-    // Every observation that masking replaced arrives as its placeholder: the whole original body is
-    // absent. (Whole, not a prefix: preserved tool-call arguments may legitimately repeat the start of
-    // a body. And only where the text was dropped: an image observation keeps small text metadata
-    // beside its image note and loses only the payload.)
-    const originals = new Map(plain.items.map((item) => [item.id, item] as const))
-    const maskedNow = fallback.artifact.sections.flatMap((section) => (section.kind === 'masked-history' ? section.items : []))
-    for (const item of maskedNow) {
-      const original = originals.get(item.id)
-      if (original?.kind !== 'tool-result' || item.kind !== 'tool-result' || !item.masked || original.masked) continue
-      if (!original.text || (item.text ?? '').includes(original.text)) continue
-      expect(input, original.id).not.toContain(original.text ?? '')
-    }
+    for (const body of droppedBodies(plain, fallback)) expect(input).not.toContain(body)
+  })
+})
+
+describe('the corpus exercises observation removal', () => {
+  it('has dropped bodies to check, so the no-observation-body assertion cannot pass vacuously', () => {
+    const total = corpus.reduce((count, each) => {
+      const plain = withoutFocus(each.snapshot)
+      return count + droppedBodies(plain, decide(plain, HUGE) as MaskedHistoryOutcome).length
+    }, 0)
+    expect(total).toBeGreaterThanOrEqual(10)
   })
 })
 
@@ -159,12 +175,10 @@ describe('the checkpoint prompt', () => {
       'next steps',
     ]
     expect([...CHECKPOINT_SECTIONS].map((section) => section.toLowerCase())).toEqual(design)
-    let from = 0
-    for (const section of design) {
-      const at = instructions.toLowerCase().indexOf(section, from)
-      expect(at, section).toBeGreaterThanOrEqual(from)
-      from = at + section.length
-    }
+    // Each section is asked for on its own numbered line, so a word that merely appears in prose
+    // ("changes", "current state") cannot satisfy this.
+    const asked = [...instructions.matchAll(/^\d+\. (.+)$/gm)].map((match) => (match[1] ?? '').toLowerCase())
+    expect(asked).toEqual(design)
   })
 
   it('forbids inventing missing state and treats the input as a record, not a request', async () => {
@@ -221,6 +235,21 @@ describe('a checkpoint that is not accepted', () => {
     const outcome = await run(plain, TINY, deps)
     expect(JSON.stringify(outcome)).not.toContain('Keep the public API')
     expect(outcome.kind).not.toBe('checkpoint')
+  })
+
+  it.each([
+    ['no response at all', undefined],
+    ['a response with no text', { stopReason: 'stop' }],
+    ['an unrecognized stop reason', { stopReason: 'content-filter', text: CHECKPOINT_TEXT }],
+  ])('falls back rather than throwing when the host hands back %s', async (_label, malformed) => {
+    const plain = withoutFocus(fixture('text-observations').snapshot)
+    const fallback = decide(plain, HUGE) as MaskedHistoryOutcome
+    const outcome = await run(plain, TINY, {
+      ...depsFor(modelDouble(responses.empty())),
+      complete: async () => malformed as never,
+    })
+    expect(outcome.kind).toBe('masked-history')
+    expect(outcome).toMatchObject({ artifact: fallback.artifact, checkpointRejection: expect.stringMatching(/^(provider-error|empty)$/) })
   })
 
   it('carries the previous state through untouched when the new checkpoint is rejected', async () => {
