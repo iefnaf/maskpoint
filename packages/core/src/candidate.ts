@@ -2,7 +2,7 @@ import { estimateTokens } from './estimate.js'
 import { HISTORY_FRAMING, roleLabel } from './framing.js'
 import type { Item } from './vocabulary.js'
 
-/** The bulk text an item carries: what masking replaces and what the candidate's size measures. */
+/** The text an item carries, whichever field holds it: the bulk that size accounting measures. */
 export function payloadOf(item: Item): string {
   switch (item.kind) {
     case 'tool-call':
@@ -21,13 +21,12 @@ export function payloadOf(item: Item): string {
 }
 
 /**
- * The candidate as text: the exact text whose estimated size the budget is compared against —
- * previous state first, then the newly evicted masked history, each entry under its role label and
- * the history framing ahead of them. Adapters render artifacts their own way, but the budget
- * measures this, labels and framing included, so a rendering that adds only its own separators
- * cannot outgrow what was measured by more than a few tokens per entry.
+ * The candidate as text: previous state first, then the history framing and each newly evicted item
+ * under its role label and payload. This is what the budget measures, so the labels and framing an
+ * adapter's rendering is expected to add are counted, not just payloads. It is the measure, not a
+ * promise about any host's rendering: an adapter that renders differently is measured the same way.
  */
-export function candidateText(previous: string | undefined, evicted: readonly Item[]): string {
+function candidateText(previous: string | undefined, evicted: readonly Item[]): string {
   const parts: string[] = []
   if (previous !== undefined && previous !== '') parts.push(previous)
   if (evicted.length > 0) {

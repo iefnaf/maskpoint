@@ -141,6 +141,8 @@ export type Outcome =
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 
+export type MaskedHistoryOutcome = Extract<Outcome, { kind: 'masked-history' }>
+
 /**
  * Turns an artifact into a host's vocabulary: a Pi summary string, DSH content blocks, injected
  * markdown. Implemented by adapters; the engine never renders.

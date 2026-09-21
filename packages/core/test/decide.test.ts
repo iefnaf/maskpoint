@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Artifact, ConversationSnapshot, Decision, EngineDetail, Item, Outcome } from '../src/index.js'
+import type { Artifact, ConversationSnapshot, Decision, EngineDetail, Item, MaskedHistoryOutcome } from '../src/index.js'
 import { decide, estimateTokens, roleLabel } from '../src/index.js'
 
 const HUGE = { checkpointTriggerTokens: 1_000_000 }
@@ -21,7 +21,7 @@ const snap = (items: Item[], boundaryId: string, extra: Partial<ConversationSnap
   ...extra,
 })
 
-type Masked = Extract<Outcome, { kind: 'masked-history' }>
+type Masked = MaskedHistoryOutcome
 
 const asMasked = (outcome: Decision): Masked => {
   if (outcome.kind !== 'masked-history') throw new Error(`expected masked-history, got ${outcome.kind}`)
@@ -128,8 +128,18 @@ describe('decide — the budget decision', () => {
     expect(accumulated(1).kind).toBe('checkpoint-requested')
   })
 
-  it('decides synchronously from the snapshot alone: no model is reachable on the masked path', () => {
+  it('decides synchronously: nothing is awaited on the masked path, and decide is handed no model', () => {
+    // The structural guarantee is decide's signature (snapshot and budget only) plus purity.test.ts,
+    // which keeps I/O out of core. This documents it: the decision is a value, not a pending call.
     expect(accumulated(size)).not.toBeInstanceOf(Promise)
+  })
+
+  it('gives the artifact, the detail and the outcome their own statistics, so changing one cannot change another', () => {
+    const outcome = asMasked(accumulated(size))
+    expect(outcome.artifact.stats).not.toBe(outcome.stats)
+    expect(outcome.detail.stats).not.toBe(outcome.stats)
+    expect(outcome.detail.stats).not.toBe(outcome.artifact.stats)
+    expect(outcome.detail.stats).toEqual(outcome.stats)
   })
 
   it('requests a checkpoint whenever custom instructions are present, however small the candidate', () => {
@@ -286,6 +296,26 @@ describe('decide — a missing or inconsistent cursor declines instead of double
 
   it('declines rather than returning an empty artifact when there is nothing to compact', () => {
     expect(declined({}, 'u1')).toEqual({ kind: 'decline', reason: 'nothing-to-compact' })
+  })
+
+  it('treats empty previous state as no state, so it can neither back a cursor nor make an empty artifact', () => {
+    expect(declined({ previousCheckpoint: '', evictedThrough: 't3' })).toEqual({ kind: 'decline', reason: 'inconsistent-cursor' })
+    expect(declined({ previousCheckpoint: '' }, 'u1')).toEqual({ kind: 'decline', reason: 'nothing-to-compact' })
+    const first = asMasked(declined({ previousCheckpoint: '' }))
+    expect(first.artifact.sections.map((section) => section.kind)).toEqual(['masked-history'])
+  })
+
+  it('declines when the previous compaction left details but there is no previous state to append to', () => {
+    const previousDetail: EngineDetail = {
+      v: 1,
+      engine: 'maskpoint',
+      strategy: 'mask',
+      checkpoints: 3,
+      stats: { observationsMasked: 1, charsOmitted: 10, candidateTokens: 5 },
+      cursor: { boundaryId: 'u3', evictedThroughId: 't2' },
+    }
+    expect(declined({ previousDetail })).toEqual({ kind: 'decline', reason: 'inconsistent-cursor' })
+    expect(declined({ previousDetail, evictedThrough: 't2' })).toEqual({ kind: 'decline', reason: 'inconsistent-cursor' })
   })
 
   it('declines when the ids or the boundary cannot be trusted', () => {

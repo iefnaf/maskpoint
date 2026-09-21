@@ -119,8 +119,9 @@ function checkEngineDetail(value: unknown, path: string): void {
   if (value.strategy !== 'mask' && value.strategy !== 'checkpoint') fail(`${path}.strategy`, 'expected "mask" or "checkpoint"')
   checkCount(value, 'checkpoints', path)
   if (!isRecord(value.stats)) return fail(`${path}.stats`, 'expected an object')
-  checkKeys(value.stats, `${path}.stats`, ['observationsMasked', 'charsOmitted', 'candidateTokens'])
-  for (const key of ['observationsMasked', 'charsOmitted', 'candidateTokens']) checkCount(value.stats, key, `${path}.stats`)
+  const statKeys = ['observationsMasked', 'charsOmitted', 'candidateTokens']
+  checkKeys(value.stats, `${path}.stats`, statKeys)
+  for (const key of statKeys) checkCount(value.stats, key, `${path}.stats`)
   if (value.files !== undefined) checkFileOps(value.files, `${path}.files`)
   if (value.cursor !== undefined) {
     if (!isRecord(value.cursor)) return fail(`${path}.cursor`, 'expected an object')

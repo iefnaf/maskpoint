@@ -38,7 +38,15 @@ const idsOf = (outcome: MaskedHistoryOutcome): string[] =>
 const bodies = (items: readonly Item[], minLength: number): string[] =>
   items.flatMap((item) => (item.kind === 'tool-result' && (item.text?.length ?? 0) >= minLength ? [item.text ?? ''] : []))
 
-/** Two more turns after a fixture's transcript, the second of which the host retains. */
+/** Every string anywhere inside a value, keys aside. */
+const stringsIn = (value: unknown): string[] => {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(stringsIn)
+  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(stringsIn)
+  return []
+}
+
+/** A turn after a fixture's transcript: a request, a call and a bulky result. */
 const tail = (label: string): Item[] => [
   { id: `${label}-user`, kind: 'user', text: 'One more thing, please.' },
   { id: `${label}-call`, kind: 'tool-call', name: 'read', callId: `${label}-c`, args: '{"path":"/workspace/app/notes.md"}' },
@@ -75,6 +83,17 @@ describe.each(corpus.map((each) => [each.name, each] as const))('the decision la
     expect(detail).toMatchObject({ v: 1, engine: 'maskpoint', strategy: 'mask', stats: outcome.stats })
     expect(detail.checkpoints).toBe(snapshot.previousDetail?.checkpoints ?? 0)
     expect(detail.cursor).toEqual({ boundaryId: snapshot.boundary.id, evictedThroughId: snapshot.items[cut - 1]?.id })
+    // Structural: every string the detail holds is a fixed label, an item id, or a path the adapter
+    // supplied. There is no field an observation body could travel in.
+    const allowed = new Set<string>([
+      detail.engine,
+      detail.strategy,
+      snapshot.boundary.id,
+      snapshot.items[cut - 1]?.id ?? '',
+      ...[snapshot.fileOps, snapshot.previousDetail?.files].flatMap((files) => (files ? [...files.read, ...files.written, ...files.edited] : [])),
+    ])
+    expect(stringsIn(detail).filter((text) => !allowed.has(text))).toEqual([])
+    // And, as a belt to those braces, no observation body or piece of one appears in it.
     const persisted = JSON.stringify(detail)
     for (const body of bodies(snapshot.items, 24)) {
       expect(persisted).not.toContain(JSON.stringify(body).slice(1, 25))
@@ -189,10 +208,12 @@ describe('the estimator is conservative on CJK and code-heavy text', () => {
     expect(estimateTokens(cjk ?? '')).toBeGreaterThan(estimateTokens(english))
   })
 
-  it('weights bulky code more than the chars/4 rule, for the code-heavy observations', () => {
+  it('never assumes symbol-dense code packs more than 3.5 characters into a token', () => {
+    // A floor the estimator must keep, not a measurement of any tokenizer: whether 3.5 is the right
+    // number is the calibration against host meters that docs/design.md leaves open (estimator calibration).
     const code = bodies(fixture('code-heavy').snapshot.items, 1).filter((text) => text.split('\n').length >= 30)
     expect(code.length).toBeGreaterThanOrEqual(2)
-    for (const text of code) expect(estimateTokens(text)).toBeGreaterThanOrEqual(Math.ceil(naive(text) * 1.1))
+    for (const text of code) expect(estimateTokens(text)).toBeGreaterThanOrEqual(Math.ceil(codePoints(text) / 3.5))
   })
 
   it('cannot let a CJK session slip under a budget the chars/4 rule would have met', () => {
