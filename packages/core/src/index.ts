@@ -1,6 +1,6 @@
 export { payloadOf } from './candidate.js'
 export type { CheckpointRequest, Decision } from './decide.js'
-export { decide } from './decide.js'
+export { DEFAULT_BUDGET, decide } from './decide.js'
 export { estimateTokens } from './estimate.js'
 export { HISTORY_FRAMING, roleLabel } from './framing.js'
 export type { MaskStats } from './mask.js'

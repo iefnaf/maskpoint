@@ -134,6 +134,12 @@ export type DeclineReason =
   | 'inconsistent-cursor'
   /** No previous state and nothing evicted: any artifact would be empty, and an empty artifact is never returned. */
   | 'nothing-to-compact'
+  /** The result would not be smaller than what it replaces: a native compaction must strictly shrink context. */
+  | 'no-size-reduction'
+  /** A checkpoint was asked for (custom instructions) and this adapter cannot run one, so the host's own compactor honours it. */
+  | 'checkpoint-unavailable'
+  /** The adapter failed unexpectedly. The host compacts, so a fault here can never leave a session without a result. */
+  | 'engine-failure'
   | 'host-rejected'
 
 export type Outcome =

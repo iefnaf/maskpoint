@@ -12,6 +12,9 @@ import type {
   Outcome,
 } from './vocabulary.js'
 
+/** The initial budget, in estimated tokens. A tuning parameter, not a derived constant (docs/design.md, "Budget"). */
+export const DEFAULT_BUDGET: BudgetPolicy = { checkpointTriggerTokens: 12_000 }
+
 /**
  * The candidate is over budget, or the caller asked for a focus: one checkpoint call should
  * condense it. The fallback is the masked history to return instead if that call is rejected, and
