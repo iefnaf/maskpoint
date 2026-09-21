@@ -2,6 +2,7 @@ import { decide } from '@maskpoint/core'
 import type { BudgetPolicy, CapabilityProfile, ConversationSnapshot, Item } from '@maskpoint/core'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
+import type { Session } from '@deepseek-ai/dsh-session'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 // Type-only: makes the optional sibling pruner service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
@@ -34,6 +35,9 @@ export const capabilities: CapabilityProfile = {
   honestCancellation: true,
 }
 
+/** Overflow keeps no tail and has no threshold: it forces one useful reduction. */
+const NO_TAIL: TriggerSpec = { thresholdTokens: 0, retainTokens: 0 }
+
 /** Marks the end of the compacted region for the engine, which is handed a boundary, not a region. */
 const REGION_END: Item = { id: '\u0000maskpoint:region-end', kind: 'opaque', note: 'end of compacted region' }
 
@@ -47,6 +51,7 @@ const REGION_END: Item = { id: '\u0000maskpoint:region-end', kind: 'opaque', not
  */
 export class MaskpointCompactionEngine extends BasicCompactionEngine {
   private readonly warnedTargets = new Set<string>()
+  private readonly warnedAbove = new WeakSet<Session>()
 
   /**
    * Automatic compaction (step-boundary pressure, or one provider-confirmed context overflow).
@@ -62,25 +67,13 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     const { session } = agent
     const routed = session.requestHeader()?.config
     if (routed === undefined || routed.provider.length === 0 || routed.model.length === 0) return null
-    const target = { provider: routed.provider, model: routed.model }
     const meter = this.ctx.tokenMeter
 
-    let spec: TriggerSpec = { thresholdTokens: 0, retainTokens: 0 }
-    if (trigger === 'pressure') {
-      const { context } = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
-      try {
-        if (context === undefined) throw new PolicyError(`no context capacity for ${target.provider}/${target.model}; configure contextWindow on that adapter model`)
-        spec = resolveTrigger(this.config, target, context.contextWindow)
-      } catch (error) {
-        if (!(error instanceof PolicyError)) throw error
-        const key = `${target.provider}/${target.model}`
-        if (!this.warnedTargets.has(key)) {
-          this.warnedTargets.add(key)
-          this.ctx.logger.warn(`maskpoint: cannot apply compaction policy — ${error.message}; not compacting`)
-        }
-        return null
-      }
-    }
+    // Overflow bypasses the threshold and the retained tail; pressure needs the model's capacity.
+    const spec = trigger === 'pressure' ? await this.triggerSpec({ provider: routed.provider, model: routed.model }, signal) : NO_TAIL
+    if (spec === undefined) return null
+    // Everything below lands synchronously, so this is the last point a cancellation can stop it.
+    signal.throwIfAborted()
     assertCanCompactInTurn(session)
 
     let measurement = meter.measure(session)
@@ -95,14 +88,48 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     measurement = meter.measure(session)
     if (masked.observationsMasked > 0) {
       this.ctx.logger.info(
-        `maskpoint (${trigger}): masked ${masked.observationsMasked} observations, ${masked.charsOmitted} chars omitted; ` +
-          `~${measurement.totalTokens} tokens now`,
+        `maskpoint (${trigger}): strategy mask, ${masked.observationsMasked} observations masked, ` +
+          `${masked.charsOmitted} chars omitted, ~${measurement.totalTokens} tokens now, no checkpoint`,
       )
-      if (trigger === 'pressure' && measurement.totalTokens >= spec.thresholdTokens) {
-        this.ctx.logger.warn(`maskpoint: still above the ${spec.thresholdTokens}-token threshold after masking; no checkpoint path is enabled`)
-      }
     }
+    if (trigger === 'pressure') this.warnIfStillAbove(session, measurement.totalTokens, spec.thresholdTokens)
     return null
+  }
+
+  /**
+   * The host's threshold and retention for the routed model, or `undefined` (after one warning per
+   * model) when its policy cannot be applied: the session is then left alone, never made worse.
+   */
+  private async triggerSpec(target: { provider: string; model: string }, signal: AbortSignal): Promise<TriggerSpec | undefined> {
+    const { context } = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)
+    try {
+      if (context === undefined) {
+        throw new PolicyError(`no context capacity for ${target.provider}/${target.model}; configure contextWindow on that adapter model`)
+      }
+      return resolveTrigger(this.config, target, context.contextWindow)
+    } catch (error) {
+      if (!(error instanceof PolicyError)) throw error
+      const key = `${target.provider}/${target.model}`
+      if (!this.warnedTargets.has(key)) {
+        this.warnedTargets.add(key)
+        this.ctx.logger.warn(`maskpoint: cannot apply compaction policy — ${error.message}; not compacting`)
+      }
+      return undefined
+    }
+  }
+
+  /**
+   * Masking alone may leave a session above the trigger, and until the checkpoint path exists (#11)
+   * nothing else will shrink it. Said once per stretch above the line, so a stuck session is visible
+   * without a warning on every step.
+   */
+  private warnIfStillAbove(session: Session, totalTokens: number, thresholdTokens: number): void {
+    if (totalTokens < thresholdTokens) {
+      this.warnedAbove.delete(session)
+    } else if (!this.warnedAbove.has(session)) {
+      this.warnedAbove.add(session)
+      this.ctx.logger.warn(`maskpoint: still above the ${thresholdTokens}-token threshold after masking; no checkpoint path is enabled`)
+    }
   }
 
   /**
@@ -112,8 +139,8 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
   protected override summarize(input: SummarizationInput, _agent: Agent, signal?: AbortSignal): Promise<SummaryResult> {
     signal?.throwIfAborted()
     const items = normalizeMessages(input.messages)
-    // A checkpoint heading the region is state the host already carries: continue from it, do not
-    // re-mask or re-frame it.
+    // State heading the region is what an earlier compaction left (as the host names it, a
+    // checkpoint; it may be masked history): continue from it, do not re-mask or re-frame it.
     const head = items[0]
     const previous = head?.kind === 'checkpoint' && head.text !== '' ? head : undefined
     const snapshot: ConversationSnapshot = {
@@ -127,8 +154,17 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     // history: the fallback the engine defines for a rejected checkpoint.
     const outcome = decision.kind === 'checkpoint-requested' ? decision.fallback : decision
     if (outcome.kind !== 'masked-history') {
-      return Promise.reject(new Error(`maskpoint: nothing to compact (${outcome.kind === 'decline' ? outcome.reason : outcome.kind})`))
+      // A decline is the engine saying this region cannot be trusted or is empty. The host's
+      // transaction closes the attempt and reports it as its `summary` failure, unchanged history.
+      const reason = outcome.kind === 'decline' ? outcome.reason : outcome.kind
+      this.ctx.logger.warn(`maskpoint (explicit): declined — ${reason}`)
+      return Promise.reject(new Error(`maskpoint: cannot mask this region (${reason})`))
     }
+    const { stats } = outcome
+    this.ctx.logger.info(
+      `maskpoint (explicit): strategy mask, ${stats.observationsMasked} observations masked, ` +
+        `${stats.charsOmitted} chars omitted, candidate ~${stats.candidateTokens} tokens, no checkpoint`,
+    )
     return Promise.resolve({
       summary: contentBlocks.render(outcome.artifact),
       provider: MASKPOINT_PROVIDER,

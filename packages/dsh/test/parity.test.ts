@@ -1,20 +1,18 @@
 import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import { describe, expect, it } from 'vitest'
+import type { SummaryResult } from '../src/host-types.js'
 import MaskpointCompactionEngine from '../src/index.js'
-import { agentFor, conversation, harness, MODEL } from './harness.js'
+import { agentFor, conversation, harness, maskedSeqsOf, MODEL } from './harness.js'
 
 const signal = new AbortController().signal
 
 /** The host backend with a stub summarizer: the oracle for when it triggers and what it selects. */
 class HostOracle extends BasicCompactionEngine {
-  protected override summarize(): ReturnType<BasicCompactionEngine['summarize' & keyof BasicCompactionEngine]> {
-    throw new Error('replaced below')
+  protected override summarize(): Promise<SummaryResult> {
+    return Promise.resolve({ summary: [{ type: 'text', text: 'oracle summary' }], provider: 'oracle', model: 'oracle' })
   }
 }
-Object.defineProperty(HostOracle.prototype, 'summarize', {
-  value: () => Promise.resolve({ summary: [{ type: 'text', text: 'oracle summary' }], provider: 'oracle', model: 'oracle' }),
-})
 
 const CASES: ReadonlyArray<readonly [string, BasicCompactionConfig, 'pressure' | 'context-overflow']> = [
   ['defaults', {}, 'pressure'],
@@ -43,10 +41,9 @@ describe('trigger and retention parity with the host backend (drift guard)', () 
     await ours.plugin(MaskpointCompactionEngine, { ...config, auto: false })
     const masked = conversation(ours, { openTurn: true })
     await ours.compaction.compactIfNeeded(agentFor(masked.session), trigger, signal)
-    const maskedSeqs = masked.session.events.flatMap((event) => (event.type === 'compaction/prune' ? event.data.shadowedSeqs : []))
 
     // Same trigger, same retained window: we mask exactly the observations the host would have compacted.
-    expect(new Set(maskedSeqs)).toEqual(new Set(hosted.observationSeqs.filter((seq) => hostRegion.has(seq))))
+    expect(new Set(maskedSeqsOf(masked.session))).toEqual(new Set(hosted.observationSeqs.filter((seq) => hostRegion.has(seq))))
   })
 
   it('agrees when the retained tail lands exactly on the budget', async () => {
@@ -66,10 +63,9 @@ describe('trigger and retention parity with the host backend (drift guard)', () 
     await ours.plugin(MaskpointCompactionEngine, { retainTokens, auto: false })
     const masked = conversation(ours, { openTurn: true })
     await ours.compaction.compactIfNeeded(agentFor(masked.session), 'pressure', signal)
-    const maskedSeqs = masked.session.events.flatMap((event) => (event.type === 'compaction/prune' ? event.data.shadowedSeqs : []))
 
     expect(hosted.observationSeqs.every((seq) => outcome!.shadowedSeqs.includes(seq))).toBe(true)
-    expect(new Set(maskedSeqs)).toEqual(new Set(hosted.observationSeqs))
+    expect(new Set(maskedSeqsOf(masked.session))).toEqual(new Set(hosted.observationSeqs))
   })
 
   it('exercises both outcomes, so the guard is not vacuous', async () => {

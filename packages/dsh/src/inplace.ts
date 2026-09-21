@@ -5,6 +5,7 @@ import type { ToolResultMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import { normalizeMessages, toolNames } from './normalize.js'
+import type { SeqRange } from './range.js'
 
 /**
  * Mask the tool observations among the surface nodes `start..end` in place, by the host's own
@@ -19,7 +20,7 @@ import { normalizeMessages, toolNames } from './normalize.js'
 export function maskInPlace(
   session: Session,
   meter: TokenMeter,
-  range: { start: number; end: number },
+  range: SeqRange,
 ): MaskStats {
   const total: MaskStats = { observationsMasked: 0, charsOmitted: 0 }
   // A snapshot: replacements move nodes to new seqs, and the pass must not chase its own writes.

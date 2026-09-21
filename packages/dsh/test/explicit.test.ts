@@ -1,9 +1,11 @@
 import { HISTORY_FRAMING } from '@maskpoint/core'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { ManualCompactionError, isCompactCheckpointSource, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
+import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import MaskpointCompactionEngine from '../src/index.js'
-import { accounting, agentFor, appendClosedTurn, conversation, harness, sequence, surfaceText } from './harness.js'
+import { accounting, agentFor, appendClosedTurn, conversation, harness, MODEL, sequence, surfaceText } from './harness.js'
 
 const signal = new AbortController().signal
 
@@ -134,6 +136,91 @@ describe('expected failures use the manual-compaction error vocabulary', () => {
     expect(sequence(session, from)).toEqual(['compaction/start', 'compaction/end'])
     const end = session.events.at(-1)!
     expect(end.type === 'compaction/end' && end.data.error !== undefined).toBe(true)
+  })
+})
+
+describe('cancellation', () => {
+  it("preserves the caller's abort reason and lands nothing", async () => {
+    const ctx = await harness()
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const { session } = conversation(ctx, { openTurn: false })
+    const from = session.events.length
+
+    // The host throws on an already-aborted request before it returns a promise.
+    const attempt = async () => ctx.compaction.compactNow(agentFor(session), AbortSignal.abort('user cancelled'))
+    await expect(attempt()).rejects.toBe('user cancelled')
+
+    expect(session.events).toHaveLength(from)
+  })
+
+  it("is the host's cancelled failure when the agent itself is cancelled", async () => {
+    const ctx = await harness()
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const { session } = conversation(ctx, { openTurn: false })
+    const from = session.events.length
+
+    const failure = await ctx.compaction.compactNow(agentFor(session, AbortSignal.abort('agent cancelled')), signal).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ManualCompactionError)
+    expect((failure as ManualCompactionError).code).toBe('cancelled')
+    expect(session.events).toHaveLength(from)
+  })
+})
+
+describe('explicit compaction observability', () => {
+  it('logs the strategy and counts of each compaction, never a body', async () => {
+    const ctx = await harness()
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const info = vi.spyOn(ctx.logger, 'info')
+    const { session } = conversation(ctx, { openTurn: false })
+
+    await ctx.compaction.compactNow(agentFor(session), signal)
+
+    const lines = info.mock.calls.map(([message]) => String(message))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatch(/^maskpoint \(explicit\): strategy mask, 3 observations masked, \d+ chars omitted, candidate ~\d+ tokens, no checkpoint$/)
+  })
+})
+
+describe('what masked history keeps besides prompts and calls', () => {
+  it('keeps reasoning and host context readable under explicit roles, and notes an image the user attached', async () => {
+    const ctx = await harness()
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const { session } = conversation(ctx, { openTurn: false })
+    session.append('turn/start', { turn: 4 })
+    session.append('user/message', createUserMessage({
+      content: [
+        { type: 'text', text: 'see the attached screenshot' },
+        { type: 'image', attachment: { attachmentId: AttachmentId('user-shot'), mediaType: 'image/png', bytes: 5_000, width: 100, height: 100 } },
+      ],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Project instructions: prefer small diffs.' }],
+      source: { kind: 'plugin', plugin: 'agent-instructions' },
+    }), { surfaceOp: 'append' })
+    session.append('step/start', { turn: 4, step: 1 })
+    session.append('assistant/message', {
+      turn: 4,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: 'the screenshot shows a failing layout' }, { type: 'text', text: 'I will fix the layout.' }],
+        source: { kind: 'model', provider: MODEL, model: MODEL },
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 4, step: 1 })
+    session.append('turn/end', { turn: 4, reason: { kind: 'completed' } })
+    // Compaction keeps the newest balanced node verbatim; a later turn puts turn 4 inside the region.
+    appendClosedTurn(session, 5, 'trailing output\n'.repeat(100))
+
+    await ctx.compaction.compactNow(agentFor(session), signal)
+
+    const text = surfaceText(session)
+    expect(text).toContain('Recorded assistant reasoning\nthe screenshot shows a failing layout')
+    expect(text).toContain('Recorded assistant message\nI will fix the layout.')
+    expect(text).toContain('Recorded host context: agent-instructions\nProject instructions: prefer small diffs.')
+    expect(text).toContain('Recorded user message\nsee the attached screenshot\n[image attachment omitted]')
   })
 })
 

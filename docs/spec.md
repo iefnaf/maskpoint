@@ -224,7 +224,7 @@ Because the engine is shared, the same masking rules, budget policy, checkpoint 
 - A replacement delivered through the summary path or the checkpoint path uses the host-sanctioned compaction checkpoint source, so that host consumers can recognize and correlate it and the host's client can render it. The automatic masking landing is an in-place tool-result replacement and carries none.
 - The host may also mount its own deterministic tool-result pruner. Maskpoint must be correct with it present or absent: idempotent masking and no-expansion guarantees make the composition safe, and the order must be verified.
 - Expected failures are reported with the host's existing manual-compaction error vocabulary so the command surface behaves normally.
-- Automatic pressure handling must respect the host's threshold and retention policy rather than reimplementing trigger logic.
+- Automatic pressure handling must respect the host's threshold and retention policy rather than reimplementing trigger logic. (The published seam does not export the host's resolver, so the adapter restates the arithmetic over the same configuration and pins it to the built-in backend by a parity test; see `docs/design.md`, DSH adapter, "As built".)
 
 ### Claude Code adapter
 

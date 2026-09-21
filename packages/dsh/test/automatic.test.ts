@@ -14,10 +14,10 @@ function isVerbatim(session: ReturnType<typeof conversation>['session'], seq: nu
   return JSON.stringify(event.data.message).includes('line of build output')
 }
 
-/** The surface's tool results, current version of each node. */
+/** The latest version of one observation: the replacement that cites it, else the original. */
 function currentResult(session: ReturnType<typeof conversation>['session'], originalSeq: number): string {
-  const event = session.events.slice(originalSeq).findLast((e) => e.type === 'tool/result' && (e.data.message.content[0].content[0] as { text?: string }).text !== undefined)
-  return JSON.stringify(event)
+  const replacement = session.events.findLast((e) => e.type === 'tool/result' && e.sourceEventSeqs?.includes(originalSeq))
+  return JSON.stringify((replacement ?? session.events[originalSeq])!.data)
 }
 
 describe('automatic compaction (compactIfNeeded, pressure)', () => {
@@ -78,7 +78,7 @@ describe('automatic compaction (compactIfNeeded, pressure)', () => {
     })
   })
 
-  it('is idempotent: a second pass over the same session lands nothing', async () => {
+  it('is idempotent: a forced pass masks what is left, and a further pass finds nothing', async () => {
     const ctx = await harness(10_000)
     await ctx.plugin(MaskpointCompactionEngine, { auto: false })
     const { session } = conversation(ctx, { openTurn: true })
@@ -139,6 +139,43 @@ describe('automatic compaction (compactIfNeeded, context overflow)', () => {
     const text = surfaceText(session)
     expect(text).not.toContain('line of build output')
     expect(text.match(/\[tool result omitted: bash/g)).toHaveLength(observationSeqs.length)
+  })
+})
+
+describe('automatic compaction observability', () => {
+  it('logs each pass with its strategy and counts, and says once when masking leaves the session above the threshold', async () => {
+    const ctx = await harness(10_000)
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const info = vi.spyOn(ctx.logger, 'info')
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    // Tiny observations: nothing to mask, yet the provider-anchored total is over the threshold.
+    const stuck = conversation(ctx, { openTurn: true, body: () => 'ok' }).session
+
+    await ctx.compaction.compactIfNeeded(agentFor(stuck), 'pressure', signal)
+    await ctx.compaction.compactIfNeeded(agentFor(stuck), 'pressure', signal)
+
+    expect(info).not.toHaveBeenCalled()
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('still above'))).toHaveLength(1)
+
+    const masking = await harness(10_000)
+    await masking.plugin(MaskpointCompactionEngine, { auto: false })
+    const log = vi.spyOn(masking.logger, 'info')
+    await masking.compaction.compactIfNeeded(agentFor(conversation(masking, { openTurn: true }).session), 'pressure', signal)
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/strategy mask, 1 observations masked, \d+ chars omitted, ~\d+ tokens now, no checkpoint/)
+  })
+})
+
+describe('automatic compaction cancellation', () => {
+  it('lands nothing when the turn was cancelled', async () => {
+    const ctx = await harness(10_000)
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    const { session } = conversation(ctx, { openTurn: true })
+    const from = session.events.length
+
+    await expect(ctx.compaction.compactIfNeeded(agentFor(session), 'pressure', AbortSignal.abort('turn cancelled'))).rejects.toBe('turn cancelled')
+    await expect(ctx.compaction.compactIfNeeded(agentFor(session), 'context-overflow', AbortSignal.abort('turn cancelled'))).rejects.toBe('turn cancelled')
+
+    expect(session.events).toHaveLength(from)
   })
 })
 

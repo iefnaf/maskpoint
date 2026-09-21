@@ -56,7 +56,7 @@ const HOST_ROWS = [
  * A preset's compaction group as the shipped presets write it: an isolated `compaction` realm
  * holding the backend, `/compact`, and the pruner. `backend` is the one row a preset copy edits.
  */
-const presetCompactionGroup = (backend: string): string => [
+const presetCompactionGroup = (...backends: string[]): string => [
   '- id: compaction',
   '  name: cordis:group',
   '  group: true',
@@ -64,8 +64,7 @@ const presetCompactionGroup = (backend: string): string => [
   '    compaction: true',
   '    toolResultPruner: true',
   '  config:',
-  '    - id: compaction-basic',
-  `      name: '${backend}'`,
+  ...backends.flatMap((backend, index) => [`    - id: backend-${index}`, `      name: '${backend}'`]),
   '    - id: command-compact',
   "      name: '@deepseek-ai/dsh-command-compact'",
   '    - id: tool-result-pruner',
@@ -131,10 +130,8 @@ describe('the backend is selectable by preset, like the host own', () => {
   })
 
   it('keeps one backend per context: a second backend beside the built-in is refused', async () => {
-    await expect(boot([...HOST_ROWS, presetCompactionGroup('@deepseek-ai/dsh-compaction-basic').replace(
-      "      name: '@deepseek-ai/dsh-command-compact'",
-      `      name: '@deepseek-ai/dsh-command-compact'\n    - id: second-backend\n      name: '${PACKAGE_NAME}'`,
-    )])).rejects.toThrow(/service "compaction" has been registered/)
+    await expect(boot([...HOST_ROWS, presetCompactionGroup('@deepseek-ai/dsh-compaction-basic', PACKAGE_NAME)]))
+      .rejects.toThrow(/service "compaction" has been registered/)
   })
 
   it('is selected on the host plane by the bundle patch: the built-in row disabled, ours inserted', async () => {
@@ -145,9 +142,8 @@ describe('the backend is selectable by preset, like the host own', () => {
       patches as Record<string, unknown>[],
     )
 
+    // Ours ⇒ also a built-in instance (it extends it), so only this direction discriminates.
     expect(ctx.get('compaction')).toBeInstanceOf(MaskpointCompactionEngine)
-    expect(ctx.get('compaction')).toBeInstanceOf(BasicCompactionEngine)
-    expect(ctx.get('compaction')!.constructor).not.toBe(BasicCompactionEngine)
   })
 
   it("declares itself a bundle whose patch is the shipped file", async () => {

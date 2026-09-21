@@ -6,7 +6,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
  * log the way the host backend reads it: the newest `turn/*` and `compaction/*` markers, with a
  * `session/end-seed` boundary proving an unmatched start belongs to an earlier session lifecycle.
  */
-function inspect(session: Session): { openTurn: number | null; lockHeld: boolean } {
+function readSessionState(session: Session): { openTurn: number | null; lockHeld: boolean } {
   let openTurn: number | null = null
   let turnKnown = false
   let lifecycleKnown = false
@@ -38,7 +38,7 @@ function inspect(session: Session): { openTurn: number | null; lockHeld: boolean
  * compaction. Expected refusals use the host's manual-compaction vocabulary.
  */
 export function assertCanCompactInTurn(session: Session): void {
-  const { openTurn, lockHeld } = inspect(session)
+  const { openTurn, lockHeld } = readSessionState(session)
   if (lockHeld) {
     throw new ManualCompactionError('busy', 'automatic compaction: a compaction already holds the session lock')
   }

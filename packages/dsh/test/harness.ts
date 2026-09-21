@@ -175,13 +175,21 @@ export function sequence(session: Session, from: number): string[] {
   })
 }
 
-/** The minimal agent the compaction seam needs: a session, routing options, and idle-task scheduling. */
-export function agentFor(session: Session): Agent {
+/**
+ * The minimal agent the compaction seam needs: a session, routing options, and idle-task
+ * scheduling. `maintenanceSignal` is the agent's own cancellation, handed to an idle task.
+ */
+export function agentFor(session: Session, maintenanceSignal: AbortSignal = new AbortController().signal): Agent {
   return {
     session,
     options: { provider: MODEL, model: MODEL },
-    runMaintenance: <T>(task: (signal: AbortSignal) => Promise<T>) => task(new AbortController().signal),
+    runMaintenance: <T>(task: (signal: AbortSignal) => Promise<T>) => task(maintenanceSignal),
   } as unknown as Agent
+}
+
+/** The seqs a pass shadowed, from the host's shadow-price events: what it masked in place. */
+export function maskedSeqsOf(session: Session): number[] {
+  return session.events.flatMap((event) => (event.type === 'compaction/prune' ? event.data.shadowedSeqs : []))
 }
 
 /** Every text fragment the model would see on the surface, tool results included. */

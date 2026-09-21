@@ -60,15 +60,17 @@ A preset row's bare package name resolves from the host base (the profile direct
 
 ## Composition with the host's pruner
 
-Correct with it mounted or not, and in either order. Its output is recognized and left as the host
-wrote it; a placeholder of ours is far below its threshold, so it never wraps one. With the built-in
-backend replaced, this backend runs the pruner after masking, where the built-in did.
+Correct with it mounted, absent, or already run earlier in the session. Its output is recognized by
+its exact marker and left as the host wrote it; a placeholder of ours is far below its threshold,
+so it never wraps one. With the built-in backend replaced, this backend runs the pruner after
+masking, where the built-in ran it before compacting.
 
 ## Known limits
 
 - Masking only until #11: an over-budget candidate is still returned as masked history, and if
   masking leaves the surface above the trigger it says so in the log and stops.
-- Statistics are logged, not persisted (`capabilities.persistMetadata` is `false`).
+- Statistics are logged for every compaction, not persisted (`capabilities.persistMetadata` is
+  `false`).
 - An explicit compaction with nothing worth masking fails with the host's `summary` error.
 - The host's trigger arithmetic, range selection and two summarizer types are restated because the
   published package does not export them.
@@ -78,7 +80,8 @@ backend replaced, this backend runs the pruner after masking, where the built-in
 `npm test` mounts the real DSH session store, token meter, replay projections and the session and
 compaction invariant companions (the executable seam contract; a shipped host does not mount them).
 Beyond behaviour, it pins: the restated trigger and range selection to the built-in backend over a
-matrix of configurations, and the pruner marker to the host's constant. The exact event sequences
+matrix of configurations (comparing which observations each masks), the pruner marker to the host's
+constant, and the rendered text's size to what the engine's budget measured. The exact event sequences
 each entry lands are asserted, so a host release that changes the protocol fails here first.
 
 ## Manual smoke procedure (needs a DSH install)

@@ -50,14 +50,13 @@ describe('the host automatic listeners drive the masking landing', () => {
     expect(idle.events).toHaveLength(events)
   })
 
-  it('turns an overflow into a retry when masking shrank the surface, and does not when nothing was left to mask', async () => {
+  it('turns an overflow into a retry when masking shrank the surface', async () => {
     const ctx = await harness(1_000_000)
     await ctx.plugin(MaskpointCompactionEngine)
     const { session } = conversation(ctx, { openTurn: true })
 
     await expect(overflow(ctx, agentFor(session))).resolves.toBe(true)
     expect(surfaceText(session)).not.toContain('line of build output')
-
   })
 
   it('does not retry an overflow when nothing was left to mask', async () => {

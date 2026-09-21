@@ -4,11 +4,12 @@ import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 
 /**
  * What the host's own tool-result pruner leaves where it removed the middle of a result
- * (`PRUNE_MARKER` in `dsh-compaction-tool-result-pruner`, without its surrounding blank lines).
- * Restated because that package is an optional sibling and may not be installed; a test pins it to
- * the host's constant so a change upstream is a red test.
+ * (`PRUNE_MARKER` in `dsh-compaction-tool-result-pruner`, blank lines included, so a result that
+ * merely quotes the phrase is still an observation). Restated because that package is an optional
+ * sibling and may not be installed; a test pins it to the host's constant so a change upstream is a
+ * red test.
  */
-export const HOST_PRUNE_MARKER = '[... tool result middle pruned ...]'
+export const HOST_PRUNE_MARKER = '\n\n[... tool result middle pruned ...]\n\n'
 
 /** Tags the host's summary framing wraps around a checkpoint's body (`frameSummary`). */
 const SUMMARY_OPEN_TAG = '<compacted-summary>'

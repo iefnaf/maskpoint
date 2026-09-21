@@ -16,7 +16,22 @@ function observations(session: ReturnType<typeof conversation>['session']): stri
 
 describe('composition with the host tool-result pruner', () => {
   it("pins its idea of the host's pruned-result marker to the host's own constant", () => {
-    expect(PRUNE_MARKER.trim()).toBe(HOST_PRUNE_MARKER)
+    expect(PRUNE_MARKER).toBe(HOST_PRUNE_MARKER)
+  })
+
+  it('still masks an observation that merely quotes the marker phrase', async () => {
+    const ctx = await harness()
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false })
+    // A log that mentions the phrase inline, as a build tool quoting the host's own output might.
+    const { session } = conversation(ctx, {
+      openTurn: true,
+      body: (n) => `step ${n}: the tool said [... tool result middle pruned ...] and carried on\n`.repeat(150),
+    })
+
+    await ctx.compaction.compactIfNeeded(agentFor(session), 'context-overflow', signal)
+
+    expect(surfaceText(session)).not.toContain('the tool said')
+    expect(surfaceText(session).match(OMITTED)).toHaveLength(3)
   })
 
   it('is correct with the pruner mounted: it masks first, and the pruner then finds nothing left to wrap', async () => {

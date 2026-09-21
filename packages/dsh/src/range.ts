@@ -4,6 +4,12 @@ import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 
 type Measurement = ReturnType<TokenMeter['measure']>
 
+/** An inclusive span of surface nodes, named by the seqs of its first and last node. */
+export interface SeqRange {
+  start: number
+  end: number
+}
+
 /**
  * The span the host would compact: from the head of the surface up to a retained recent tail of at
  * least `retainTokens`, cut at a tool-pairing-balanced boundary. Everything after `end` is the
@@ -14,7 +20,7 @@ export function selectRange(
   session: Session,
   measurement: Measurement,
   retainTokens: number,
-): { start: number; end: number } | null {
+): SeqRange | null {
   const priced = measurement.nodes
   if (priced.length === 0) return null
   const nodes = session.surface.nodes
