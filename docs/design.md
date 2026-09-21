@@ -1,6 +1,6 @@
 # Maskpoint — Design
 
-**Status:** Draft for review · **Created:** 2026-09-21 · **Spec:** issue #1 (`docs/spec.md`)
+**Status:** Draft for review · **Created:** 2026-09-21 · **Canonical:** this file · **Work anchor:** issue #1 · **Spec:** [`docs/spec.md`](spec.md)
 
 ## Objective
 

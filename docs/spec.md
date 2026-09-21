@@ -1,5 +1,7 @@
 # Maskpoint — Portable Hybrid Context Compaction
 
+**Status:** current · **Created:** 2026-09-21 · **Canonical:** this file · **Work anchor:** issue #1 · **Design:** [`docs/design.md`](design.md)
+
 ## Problem Statement
 
 Every coding agent I use — Pi, Claude Code, Codex, DSH — eventually runs out of context and compacts. All four do roughly the same thing: when history must shrink, they send a large span of history to an LLM and replace it with prose. Software engineering sessions are dominated by verbose tool observations (file dumps, command output, test logs, diffs), so this spends a model call to remove material that is mostly mechanical noise.

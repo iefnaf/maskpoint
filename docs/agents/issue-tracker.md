@@ -27,7 +27,9 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue.
+Create a GitHub issue — but keep the **document** in the repository. Long-lived artifacts (`docs/spec.md`, `docs/design.md`) are canonical in `docs/` where they are diffed and reviewed in git; the tracker holds the **work anchor**: a short issue carrying the label, the milestone checklist, and links to the canonical files. Never paste a whole spec or design doc into an issue body — the duplicate drifts.
+
+When a skill says "publish the spec to the tracker", create or update the anchor issue and point it at `docs/spec.md`.
 
 ## When a skill says "fetch the relevant ticket"
 
