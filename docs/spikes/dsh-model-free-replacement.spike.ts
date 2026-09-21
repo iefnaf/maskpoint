@@ -278,6 +278,28 @@ class MaskOnlySummaryEngine extends BasicCompactionEngine {
   }
 }
 
+/**
+ * After a checkpoint-provenance landing, all three readers agree and each moved by exactly
+ * the priced delta (replacement minus shadowed). Returns the replacement's price.
+ */
+function expectExactCheckpointLanding(
+  ctx: Context,
+  session: Session,
+  before: ReturnType<typeof accounting>,
+  result: CompactionResult,
+): number {
+  const checkpoint = session.events.findLast(e => e.type === 'user/message' && isCompactCheckpointSource(e.data.source))!
+  const replacement = ctx.tokenMeter.measure(session).nodes.find(node => node.seq === checkpoint.seq)!.tokens
+  const delta = replacement - result.shadowedTokenCount
+  const after = accounting(ctx, session)
+  expect(after.breakdownMessages).toBe(after.surface)
+  expect(after.surface).toBe(before.surface + delta)
+  expect(after.total).toBe(before.total + delta)
+  expect(after.projected).toBe(before.projected! + delta)
+  expect(after.total).toBeLessThan(before.total)
+  return replacement
+}
+
 function agentFor(session: Session): never {
   return {
     session,
@@ -356,11 +378,14 @@ describe('Unknown 1: landing shapes for a model-free masked replacement', () => 
     expect(() => landInPlaceMask(ctx, session, observationSeqs)).toThrow(/outside any open turn/)
   })
 
-  it('A2 region replacement, checkpoint provenance, bracket, prune instead of summary: rejected at compaction/end after the surface already changed', async () => {
+  it.each([
+    ['open turn', true, 4],
+    ['idle', false, null],
+  ] as const)('A2 (%s) region replacement, checkpoint provenance, bracket, prune instead of summary: rejected at compaction/end after the surface already changed', async (_label, open, turn) => {
     const ctx = await harness()
-    const { session } = conversation(ctx, true)
+    const { session } = conversation(ctx, open)
     const generation = session.surface.replaceGeneration
-    expect(() => landRegionWithPrune(ctx, session, { bracket: true, checkpointSource: true, turn: 4 }))
+    expect(() => landRegionWithPrune(ctx, session, { bracket: true, checkpointSource: true, turn }))
       .toThrow(/successful compaction\/end requires one compaction\/summary/)
     // The replacement had already committed: this is a partial mutation with an unclosed lock.
     expect(session.surface.replaceGeneration).toBeGreaterThan(generation)
@@ -368,9 +393,12 @@ describe('Unknown 1: landing shapes for a model-free masked replacement', () => 
     expect(tail).toEqual(['compaction/start', 'compaction/prune', 'user/message(replace)'])
   })
 
-  it('A3 region replacement, checkpoint provenance, no bracket: rejected before it lands', async () => {
+  it.each([
+    ['open turn', true],
+    ['idle', false],
+  ] as const)('A3 (%s) region replacement, checkpoint provenance, no bracket: rejected before it lands', async (_label, open) => {
     const ctx = await harness()
-    const { session } = conversation(ctx, true)
+    const { session } = conversation(ctx, open)
     const generation = session.surface.replaceGeneration
     expect(() => landRegionWithPrune(ctx, session, { bracket: false, checkpointSource: true, turn: null }))
       .toThrow(/compaction checkpoint has no matching compaction\/start/)
@@ -409,14 +437,10 @@ describe('Unknown 1: landing shapes for a model-free masked replacement', () => 
     expect(summary.data.llmStreamCall).toBeUndefined()
     expect(summary.data.usage).toBeUndefined()
     expect({ provider: summary.data.provider, model: summary.data.model }).toEqual({ provider: 'maskpoint', model: 'mask-only' })
+    const checkpointTokens = expectExactCheckpointLanding(ctx, session, before, result)
     const after = accounting(ctx, session)
-    expect(after.breakdownMessages).toBe(after.surface)
-    const checkpoint = session.events.findLast(e => e.type === 'user/message' && isCompactCheckpointSource(e.data.source))!
-    const checkpointTokens = ctx.tokenMeter.measure(session).nodes.find(node => node.seq === checkpoint.seq)!.tokens
-    expect(after.total).toBe(before.total - result.shadowedTokenCount + checkpointTokens)
     console.log(`[spike] B total ${before.total} -> ${after.total}; shadowed ${result.shadowedTokenCount}, replacement ${checkpointTokens}; `
       + `surface ${before.surface} -> ${after.surface}; breakdown ${before.breakdownMessages} -> ${after.breakdownMessages}`)
-    expect(after.total).toBeLessThan(before.total)
   })
 
   it('B summary path, unmarked, idle `compactNow`: the only shape that lands between turns and returns a CompactionResult', async () => {
@@ -432,9 +456,7 @@ describe('Unknown 1: landing shapes for a model-free masked replacement', () => 
     expect(sequence(session, from)).toEqual(['compaction/start', 'compaction/summary', 'user/message(replace)', 'compaction/end'])
     const start = session.events[result!.startSeq]!
     expect(start.type === 'compaction/start' && start.data.turn === null).toBe(true)
-    const after = accounting(ctx, session)
-    expect(after.breakdownMessages).toBe(after.surface)
-    expect(after.total).toBeLessThan(before.total)
+    expectExactCheckpointLanding(ctx, session, before, result!)
   })
 
   it('negative control: a replacement with NO shadow price makes replay accounting drift', async () => {

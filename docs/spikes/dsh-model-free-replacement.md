@@ -7,15 +7,24 @@ Investigated against deepseek-harness ("DSH") commit `47f943859b`, package versi
 ## Outcome
 
 1. **Model-free masking lands two ways, chosen by entry point.** The automatic entry (`compactIfNeeded`) reuses the host's prune protocol, in place. The explicit entries (`compactNow`, `compactRegion`) use the summary path with a Maskpoint envelope and no summarization-call marker. Neither candidate alone covers every entry point.
-2. **The backend ships as an external package**, installed as a DSH bundle that disables the built-in backend and inserts ours. Not as an in-tree sibling.
-3. **Host token accounting stays exact under both landings**, checked against all three readers: `measure().totalTokens`, and the `contextBreakdown` and `contextPressure` replay projections.
-4. **Two corrections to the design doc:** the summary path does not require a summarization-call marker, and a patch's `name` cannot retarget a row.
+2. **The backend ships as an external package**, installed as a DSH bundle that disables the built-in backend and inserts ours. Not as an in-tree sibling. This rests on the design's constraints plus the feasibility shown here, and is conditional on the preset check under Risks.
+3. **Host token accounting stays exact under both landings**, asserted against all three readers: `measure().totalTokens` and priced surface, and the `contextBreakdown` and `contextPressure` replay projections.
+4. **Two corrections to earlier drafts:** the summary path does not require a summarization-call marker, and a patch's `name` cannot retarget a row.
+
+Claims fall in two groups. **Exercised by the spike:** the landing matrix, accounting, the negative control, patch semantics, one-backend-per-context. **Read from source, not exercised:** listed under [Read from source only](#read-from-source-only).
 
 ## Method
 
-A characterization suite (12 tests) run in an isolated copy of DSH. Each landing shape is built with only public entrypoints and appended to a real session, under DSH's real token meter, real replay projections, and the session and compaction invariant companions. The fixture is three closed turns, each with a user prompt, one large tool observation, and a closing assistant message; the last message carries provider usage so the pressure figure is anchored the way a live session is. Landings run both inside an open fourth turn (the automatic path) and with the session idle (the manual path).
+A characterization suite (14 tests) run in an isolated copy of DSH. Each landing shape is built with only public entrypoints and appended to a real session, under DSH's real token meter, real replay projections, and the session and compaction invariant companions. The fixture is three closed turns, each with a user prompt, one large tool observation, and a closing assistant message; the last message carries provider usage so the pressure figure is anchored the way a live session is. Landings run both inside an open fourth turn (the automatic path) and with the session idle (the manual path).
 
-Baseline before adding the spike: DSH's own pruner and `compaction-basic` specs pass (90 tests). After: all compaction and token-meter suites pass (16 files, 260 tests).
+Baseline before adding the spike: DSH's own pruner and `compaction-basic` specs pass (90 tests). The spike ends at 14 of 14 passing; before it grew from 12 to 14 tests, all compaction and token-meter suites passed together (16 files, 260 tests).
+
+Captured output of the two accounting lines the table below quotes:
+
+```
+[spike] A1 total 9054 -> 5652; shadowed 3486, replacement 84; surface 3620 -> 218; breakdown 3620 -> 218
+[spike] B total 9054 -> 5641; shadowed 3606, replacement 193; surface 3620 -> 207; breakdown 3620 -> 207
+```
 
 ## Unknown 1: durable representation of a model-free masked replacement
 
@@ -25,7 +34,7 @@ The pruner's landing, `packages/compaction/compaction-tool-result-pruner/src/ind
 
 ### Landing matrix
 
-Every row was run; "accounting" means all three readers agree and the total moved by exactly the priced delta.
+Every cell was run except A4 idle; "accounting" means all three readers agree and each moved by exactly the priced delta. "Rejected" means a DSH invariant companion refused it; see the caveat under Risks about which of them the shipped host mounts.
 
 | Shape | Open turn (automatic) | Idle (manual) | Notes |
 |---|---|---|---|
@@ -47,19 +56,19 @@ Event sequences observed:
 | A1, three observations | total 9,054 · surface 3,620 | total 5,652 · surface 218 | 3,486 | 84 |
 | B, whole closed region | total 9,054 · surface 3,620 | total 5,641 · surface 207 | 3,606 | 193 |
 
-In both, `contextBreakdown.messageTokens` equals `measure().surfaceTokens` after landing, and the totals fall by exactly shadowed minus replacement (A1: 3,402; B: 3,413). For A1 the `contextPressure` projected figure also moves by exactly that delta. A1 advances `surface.replaceGeneration`, which is what the overflow-retry path uses as proof of progress (`compaction-basic/src/index.ts:191-219`). Masking left every non-observation message deep-equal and left every tool-call/result pairing predicate unchanged.
+In both, `contextBreakdown.messageTokens` equals `measure().surfaceTokens` after landing, and the meter total, the priced surface, and the `contextPressure` projected figure each fall by exactly shadowed minus replacement (A1: 3,402; B: 3,413). B asserts the same in an open turn and idle. A1 advances `surface.replaceGeneration`, which is what the overflow-retry path uses as proof of progress (`compaction-basic/src/index.ts:191-219`). Masking left every non-observation message deep-equal and left every tool-call/result pairing predicate unchanged.
 
 **Negative control:** the same in-place replacement without the `compaction/prune` shadow price makes `measure().surfaceTokens` fall while `contextBreakdown.messageTokens` still counts the old body. The shadow price is what keeps replay accounting correct, which is why a plain content rewrite is not an option.
 
 ### Decision
 
-- **Automatic entry (`compactIfNeeded`): A1.** It is the only shape that is legal, honest, and composes with the host's own pruner. `compactIfNeeded` is documented to return `null` when no summary ran, and `compaction-basic` already returns `null` after a prune-only pass, so a prune-only landing fits its return type.
-- **Explicit entries (`compactNow`, `compactRegion`): B, with a Maskpoint envelope.** `provider: 'maskpoint'`, `model: 'mask-only'`, no `llmStreamCall`, no `usage`. Two independent reasons, either sufficient: A1 is illegal when idle, and both methods must return a `CompactionResult`, whose `startSeq`/`summarySeq`/`endSeq` a prune landing cannot populate. `/compact` also needs a non-null result: on `null` it prints "No compactable history yet." (`command-compact/src/index.ts:67`) and it cites `summarySeq`.
+- **Automatic entry (`compactIfNeeded`): A1.** It is the only shape that the invariants accept and that tells the truth about authorship, and it uses the same protocol on the same nodes as the host's own pruner (whether the two need an ordering rule is unverified; issue #10). `compactIfNeeded` is documented to return `null` when no summary ran, and `compaction-basic` already returns `null` after a prune-only pass, so a prune-only landing fits its return type. The spike appended A1 directly to a session; it did not drive it through a backend's `compactIfNeeded`.
+- **Explicit entries (`compactNow`, `compactRegion`): B, with a Maskpoint envelope.** `provider: 'maskpoint'`, `model: 'mask-only'`, no `llmStreamCall`, no `usage`. Two reasons. First, A1 is refused by the session invariant when idle, which is where `compactNow` runs. Second, `compactRegion` must return a non-null `CompactionResult`, whose `startSeq`/`summarySeq`/`endSeq` a prune landing cannot populate. `compactNow` may return `null`, but the `/compact` command then prints "No compactable history yet." (`command-compact/src/index.ts:67`) after masking has landed, which misreports the outcome, and it cites `summarySeq` on success. That is a consequence, not a type constraint.
 - **Checkpoint path stays the ordinary marked call** (`llmStreamCall: true`, real envelope, real usage). That is issue #11.
 
 ### Rejected
 
-- **Prune protocol for everything.** Cannot serve the manual path: A1 is illegal when idle, and the region-level variants (A2, A3) are rejected by the compaction invariant. A4 lands but leaves the seam.
+- **Prune protocol for everything.** Cannot serve the manual path: A1 is refused by the session invariant when idle, and the region-level variants (A2, A3) are refused by the compaction invariant. A4 lands but leaves the seam.
 - **Summary path for everything, with the routed provider and model as the envelope.** That is the misreport the issue warns about. The trajectory view builds a completed compaction request from `compaction/summary`, presenting `provider`/`model` as provenance and request config (`ui-trajectory/src/client/trajectory-compaction-definition.ts:62-75`). Claiming the session's real model wrote masked history would be false. The sentinel envelope is honest about the author but still shows a completed compaction request with no usage.
 
 ### Cost of B, and the way out
@@ -70,7 +79,7 @@ B is a reluctant fallback, confined to the two entries that cannot use A1. Its c
 
 ### Evidence
 
-- **The seam is a plain Cordis service.** `CompactionEngine extends Service` and registers as `compaction` (`compaction/src/index.ts`); `command-compact` injects `compaction` and is documented as backend-independent. A class extending it from public entrypoints mounts as `ctx.compaction` under the real Loader, under any package name.
+- **The seam is a plain Cordis service.** `CompactionEngine extends Service` and registers as `compaction` (`compaction/src/index.ts`); `command-compact` injects `compaction` and is documented as backend-independent. A class extending it from public entrypoints mounts as `ctx.compaction` under the real Loader. The spike's module resolver is a map, so real package-name resolution was not exercised; the Loader mounts whatever the resolver returns.
 - **One backend per context.** Mounting a second provider beside the built-in fails: `service "compaction" has been registered at <BasicCompactionEngine>`. An external backend must replace the built-in row, not sit next to it.
 - **A patch's `name` is a guard, not a retarget.** `applyEntryPatches` skips a patch whose `name` differs from the target row's (`vendor/include/src/index.ts:116`). A patch `{ id: 'compaction-basic', name: 'maskpoint-dsh' }` leaves the built-in mounted (tested). What works: disable the built-in row, naming it in the guard, and insert ours: `{ id: 'compaction-basic', name: '@deepseek-ai/dsh-compaction-basic', disabled: true }` plus `{ insert: [{ id: 'maskpoint', name: 'maskpoint-dsh' }] }` (tested). This corrects the app-boot README's wording that an id-targeted patch only replaces `config`.
 - **Out-of-tree install is a documented path.** A bundle declares `dsh.bundle` in its `package.json`; `dsh plugin add` installs it into a profile, and the Loader resolves names from the profile's `node_modules` (`docs/user/develop/basic/publish.md`, `app-boot/src/profile.ts:15-21`). Read from source and docs; not run end to end.
@@ -78,7 +87,7 @@ B is a reluctant fallback, confined to the two entries that cannot use A1. Its c
 
 ### Decision
 
-**External package**, shipped as a DSH bundle. It follows the design's "documented extension points only" constraint, keeps the shared core in our workspace (an in-tree DSH package would still have to depend on our core), and leaves our release cadence independent of DSH's. The seam surface it depends on is the same either way, so moving in-tree later is a code move, not a rewrite.
+**External package**, shipped as a DSH bundle. The spike shows it is feasible for the host-plane row; the choice between feasible options rests on the design's constraints, not on a measurement. It follows the "documented extension points only" constraint, keeps the shared core in our workspace (an in-tree DSH package would still have to depend on our core), and leaves our release cadence independent of DSH's. The decision is conditional on the preset check below.
 
 ### Rejected: in-tree sibling of `dsh-compaction-basic`
 
@@ -90,6 +99,16 @@ Technically simpler, and it would make the backend selectable from the shipped p
 - **rc-stage seam.** Types and event shapes can change between host releases; the per-release conformance fixtures in the design's testing section are the mitigation.
 - **Deep import of two types.** `SummaryResult` and `SummarizationInput` are not re-exported from the `dsh-compaction-basic` root; they are reachable through its `./src/*` export. Ask upstream to re-export, or restate the two small types.
 - **Invariants appear not to be mounted in the shipped product.** They run in DSH's test topologies and the agent-spine demo composition (which mounts the session, agent, scope, and agent-loop companions but not compaction). A search of the shipped bundle, presets, and launcher found no mount of the registry. So the rejections in the matrix are the seam's contract, not a guard users would hit, and a shape that violates it would probably land silently in production. Our conformance tests must mount the session and compaction companions themselves.
+
+## Read from source only
+
+Stated above as fact but not exercised by the spike; each was read at the cited location.
+
+- The trajectory view presents `compaction/summary`'s `provider`/`model` as a completed compaction request (`ui-trajectory/src/client/trajectory-compaction-definition.ts:62-75`). This is the basis for calling B a misreport.
+- A replacement whose armed shadow-price claim names a different range throws (`surface-projection.ts`). The spike shows the no-claim drift, not the mismatched-claim throw.
+- `compactIfNeeded` returns `null` after a prune-only pass, and `/compact` prints "No compactable history yet." on `null` (`compaction-basic/src/index.ts`, `command-compact/src/index.ts:67`).
+- The install path: `dsh plugin add`, profile bundles, and name resolution from the profile's `node_modules` (`docs/user/develop/basic/publish.md`, `app-boot/src/profile.ts:15-21`).
+- Which invariant companions the shipped host mounts. This is a negative search, hence "appear not to be".
 
 ## Not verified
 
