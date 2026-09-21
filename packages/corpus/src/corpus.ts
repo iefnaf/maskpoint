@@ -92,6 +92,44 @@ function validateItem(value: unknown, path: string): void {
   }
 }
 
+function checkStringList(rec: Rec, key: string, path: string): void {
+  const value = rec[key]
+  if (!Array.isArray(value) || value.some((each) => typeof each !== 'string')) {
+    fail(`${path}.${key}`, 'expected a list of strings')
+  }
+}
+
+function checkFileOps(value: unknown, path: string): void {
+  if (!isRecord(value)) return fail(path, 'expected an object')
+  checkKeys(value, path, ['read', 'written', 'edited'])
+  for (const key of ['read', 'written', 'edited']) checkStringList(value, key, path)
+}
+
+function checkCount(rec: Rec, key: string, path: string): void {
+  const value = rec[key]
+  if (!Number.isInteger(value) || (value as number) < 0) fail(`${path}.${key}`, 'expected a non-negative integer')
+}
+
+/** The persisted state of the previous compaction. Strict, and never a place for observation text. */
+function checkEngineDetail(value: unknown, path: string): void {
+  if (!isRecord(value)) return fail(path, 'expected an object')
+  checkKeys(value, path, ['v', 'engine', 'strategy', 'checkpoints', 'stats', 'files', 'cursor'])
+  if (value.v !== 1) fail(`${path}.v`, 'expected version 1')
+  if (value.engine !== 'maskpoint') fail(`${path}.engine`, 'expected "maskpoint"')
+  if (value.strategy !== 'mask' && value.strategy !== 'checkpoint') fail(`${path}.strategy`, 'expected "mask" or "checkpoint"')
+  checkCount(value, 'checkpoints', path)
+  if (!isRecord(value.stats)) return fail(`${path}.stats`, 'expected an object')
+  checkKeys(value.stats, `${path}.stats`, ['observationsMasked', 'charsOmitted', 'candidateTokens'])
+  for (const key of ['observationsMasked', 'charsOmitted', 'candidateTokens']) checkCount(value.stats, key, `${path}.stats`)
+  if (value.files !== undefined) checkFileOps(value.files, `${path}.files`)
+  if (value.cursor !== undefined) {
+    if (!isRecord(value.cursor)) return fail(`${path}.cursor`, 'expected an object')
+    checkKeys(value.cursor, `${path}.cursor`, ['boundaryId', 'evictedThroughId'])
+    requireString(value.cursor, 'boundaryId', `${path}.cursor`)
+    requireString(value.cursor, 'evictedThroughId', `${path}.cursor`)
+  }
+}
+
 /** Validate untrusted JSON as a ConversationSnapshot. Strict: unknown keys are errors, so typos surface. */
 export function parseSnapshot(value: unknown): ConversationSnapshot {
   if (!isRecord(value)) return fail('snapshot', 'expected an object')
@@ -100,6 +138,8 @@ export function parseSnapshot(value: unknown): ConversationSnapshot {
     'boundary',
     'previousCheckpoint',
     'evictedThrough',
+    'previousDetail',
+    'fileOps',
     'customInstructions',
     'reason',
   ])
@@ -122,6 +162,8 @@ export function parseSnapshot(value: unknown): ConversationSnapshot {
   if (value.reason !== 'manual' && value.reason !== 'threshold' && value.reason !== 'overflow') {
     fail('snapshot.reason', 'expected "manual", "threshold" or "overflow"')
   }
+  if (value.previousDetail !== undefined) checkEngineDetail(value.previousDetail, 'snapshot.previousDetail')
+  if (value.fileOps !== undefined) checkFileOps(value.fileOps, 'snapshot.fileOps')
   checkOptionalString(value, 'previousCheckpoint', 'snapshot')
   checkOptionalString(value, 'customInstructions', 'snapshot')
   if (value.evictedThrough !== undefined) {

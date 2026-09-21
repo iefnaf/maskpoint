@@ -109,5 +109,23 @@
   },
   "reason": "threshold",
   "previousCheckpoint": "## User context and constraints\n- Migrate the billing service from callbacks to async/await; keep the public API unchanged.\n## Completed work\n- invoice.ts and ledger.ts converted; their tests pass.\n## Pending work\n- payments.ts and webhooks.ts remain.\n## Next steps\n- Convert payments.ts, then run the full suite.",
-  "evictedThrough": "i04"
+  "evictedThrough": "i04",
+  "previousDetail": {
+    "v": 1,
+    "engine": "maskpoint",
+    "strategy": "checkpoint",
+    "checkpoints": 1,
+    "stats": { "observationsMasked": 4, "charsOmitted": 5210, "candidateTokens": 9400 },
+    "files": {
+      "read": ["/workspace/app/src/billing/invoice.ts", "/workspace/app/src/billing/ledger.ts"],
+      "written": [],
+      "edited": ["/workspace/app/src/billing/invoice.ts", "/workspace/app/src/billing/ledger.ts"]
+    },
+    "cursor": { "boundaryId": "i05", "evictedThroughId": "i04" }
+  },
+  "fileOps": {
+    "read": ["/workspace/app/src/billing/payments.ts"],
+    "written": [],
+    "edited": ["/workspace/app/src/billing/payments.ts"]
+  }
 }
