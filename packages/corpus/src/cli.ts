@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { corpusDir, loadCorpus } from './corpus.js'
-import { passThroughEngine, replay } from './replay.js'
+import { maskingEngine, replay } from './replay.js'
 import { checkSanitized } from './sanitize.js'
 
 export interface Io {
@@ -35,7 +35,7 @@ export function main(argv: string[], io: Io): number {
           io.err(`unknown fixture "${name}"; available: ${corpus.map((each) => each.name).join(', ')}\n`)
           return 1
         }
-        io.out(replay(fixture, passThroughEngine))
+        io.out(replay(fixture, maskingEngine))
         return 0
       }
 

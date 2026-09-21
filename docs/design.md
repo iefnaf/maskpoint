@@ -190,7 +190,10 @@ type AdapterEffect =
 ```ts
 function run(input: ConversationSnapshot, budget: BudgetPolicy, deps: EngineDeps): Promise<Outcome>
 function estimateTokens(text: string): number
-function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; stats: Stats }
+function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; stats: MaskStats }
+// MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>: candidateTokens belongs to accumulation.
+// maskSpan returns only the compacted side (everything before the boundary) and throws MaskingError
+// when the boundary or ids cannot be trusted, which an adapter turns into a decline.
 ```
 
 ## Algorithms
