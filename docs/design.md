@@ -158,7 +158,8 @@ interface EngineDetail {            // persisted; never contains observation bod
 }
 
 type Outcome =
-  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats }
+  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats
+      checkpointRejection?: 'provider-error' | 'aborted' | 'truncated' | 'empty' | 'tool-call' }  // set when a checkpoint was tried and rejected
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 ```
@@ -204,6 +205,18 @@ function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; sta
 function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
 // maskSpan without the boundary: masks a span the caller has already cut, e.g. the newly evicted
 // items once accumulation has dropped what earlier state already represents.
+
+interface EngineDeps {
+  complete(request: ModelRequest): Promise<ModelResponse>   // injected by the adapter; the core itself does no I/O
+  newRoutingId(): string                                    // fresh identity, asked for once per checkpoint call
+  signal: CancellationSignal                                // the host's signal, carried into the request
+  checkpoint: { maxOutputTokens: number; model?: string }   // model absent = the session model
+}
+// ModelRequest = { model?, instructions, input, maxOutputTokens, routingId, cacheRetention: 'none',
+//                  tools: [], signal }. ModelResponse.stopReason = 'stop' | 'length' | 'tool-call' | 'error' | 'aborted'.
+// `run` is `decide` plus the one call: the masked-history path never touches `deps`. A rejected
+// checkpoint returns the masked-history outcome with `checkpointRejection` set to why, so an adapter
+// can log and count it; an accepted one returns `kind: 'checkpoint'` with the model's usage.
 ```
 
 ## Algorithms

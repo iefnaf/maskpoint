@@ -36,6 +36,13 @@ every fixture (the cursor, the appended span, the budget boundary, the persisted
 compaction fed the first one's artifact) and asserts that the estimator is conservative on the
 `cjk` and `code-heavy` fixtures.
 
+`src/model-double.ts` is the deterministic model double for the checkpoint call: it records every
+request and answers with one scripted response (`responses.success`, `providerError`, `aborted`,
+`lengthStop`, `toolCall`, `empty`) or throws. `test/checkpoint.test.ts` is Seam 1 for the checkpoint
+path: `run` over every fixture and the double, asserting the number and contract of model calls,
+acceptance, each rejection's fallback to masked history, cancellation, usage, and the next
+compaction building on an accepted checkpoint. No network.
+
 ## Adding a fixture
 
 1. Add `fixtures/<name>.json` and list it in `fixtures/manifest.json`.

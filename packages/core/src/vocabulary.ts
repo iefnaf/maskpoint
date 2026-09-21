@@ -127,6 +127,65 @@ export interface Artifact {
   stats: Stats
 }
 
+/**
+ * The part of a host's `AbortSignal` the engine reads. The engine package has no DOM or Node
+ * typings, so it names the shape; a host's own signal satisfies it and is passed through as-is.
+ */
+export interface CancellationSignal {
+  readonly aborted: boolean
+}
+
+/**
+ * One checkpoint call, in the host-neutral shape an adapter turns into its own model request.
+ * Everything a one-off summarization must not inherit from the main loop is fixed here: it has no
+ * tools, keeps no cache, and never shares the main loop's routing identity.
+ */
+export interface ModelRequest {
+  /** The configured checkpoint model. Absent means the session's own model. */
+  model?: string
+  /** What to produce and in what format. */
+  instructions: string
+  /** The candidate: previous state plus newly evicted masked history, never original observation bodies. */
+  input: string
+  /** The generation cap. A response cut off by it is rejected. */
+  maxOutputTokens: number
+  /** Fresh for this call, so a one-off summarization does not distort the main loop's caching. */
+  routingId: string
+  cacheRetention: 'none'
+  /** Always empty: a summarization call cannot perform side effects. */
+  tools: readonly never[]
+  /** The host's own cancellation signal. */
+  signal: CancellationSignal
+}
+
+/** How a model call ended, in the host-neutral vocabulary the double and every adapter share. */
+export interface ModelResponse {
+  stopReason: 'stop' | 'length' | 'tool-call' | 'error' | 'aborted'
+  /** Whatever text came back. Meaningful only when `stopReason` is `stop`. */
+  text: string
+  usage?: Usage
+  error?: string
+}
+
+/** Everything the engine needs from its host to make the one checkpoint call. */
+export interface EngineDeps {
+  /** The host's model call. Adapters implement it; tests use a deterministic double. */
+  complete(request: ModelRequest): Promise<ModelResponse>
+  /** A routing identity that has not been used before. Asked for once per checkpoint call. */
+  newRoutingId(): string
+  /** The host's cancellation signal, carried into the checkpoint request. */
+  signal: CancellationSignal
+  checkpoint: {
+    /** The generation cap for the checkpoint. */
+    maxOutputTokens: number
+    /** A configured model for checkpoints. Absent means the session model. */
+    model?: string
+  }
+}
+
+/** Why a checkpoint call was not accepted. The compaction falls back to masked history. */
+export type CheckpointRejection = 'provider-error' | 'aborted' | 'truncated' | 'empty' | 'tool-call'
+
 /** Why an adapter returned no custom result, leaving the host to compact normally. */
 export type DeclineReason =
   | 'unreadable-snapshot'
@@ -137,7 +196,14 @@ export type DeclineReason =
   | 'host-rejected'
 
 export type Outcome =
-  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats }
+  /** `checkpointRejection` is set when a checkpoint was attempted and this is the fallback. */
+  | {
+      kind: 'masked-history'
+      artifact: Artifact
+      detail: EngineDetail
+      stats: Stats
+      checkpointRejection?: CheckpointRejection
+    }
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 

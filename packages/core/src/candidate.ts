@@ -1,6 +1,6 @@
 import { estimateTokens } from './estimate.js'
 import { HISTORY_FRAMING, roleLabel } from './framing.js'
-import type { Item } from './vocabulary.js'
+import type { Artifact, Item } from './vocabulary.js'
 
 /** The text an item carries, whichever field holds it: the bulk that size accounting measures. */
 export function payloadOf(item: Item): string {
@@ -34,6 +34,17 @@ function candidateText(previous: string | undefined, evicted: readonly Item[]): 
     for (const item of evicted) parts.push(`${roleLabel(item)}\n${payloadOf(item)}`)
   }
   return parts.join('\n\n')
+}
+
+/**
+ * The candidate text of an artifact `decide` assembled (previous state, then masked history): exactly
+ * what `candidateTokens` measured when the budget was decided, so a checkpoint call is fed the very
+ * text the budget compared.
+ */
+export function artifactCandidateText(artifact: Artifact): string {
+  const previous = artifact.sections.find((section) => section.kind === 'checkpoint')
+  const evicted = artifact.sections.flatMap((section) => (section.kind === 'masked-history' ? section.items : []))
+  return candidateText(previous?.text, evicted)
 }
 
 /** Estimated tokens of the candidate, by the one estimator masking and the budget share. */
