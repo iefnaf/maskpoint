@@ -1,0 +1,357 @@
+{
+  "type": "session_before_compact",
+  "preparation": {
+    "firstKeptEntryId": "ef42e912",
+    "messagesToSummarize": [],
+    "turnPrefixMessages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Read src/data1.ts and tell me how many exported constants it has."
+          }
+        ],
+        "timestamp": 1789995535172
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_a5ee631a1e0645d8bfc0f42c",
+            "name": "read",
+            "arguments": {
+              "path": "src/data1.ts"
+            }
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "zhipu",
+        "model": "glm-5.3",
+        "usage": {
+          "input": 54,
+          "output": 14,
+          "cacheRead": 1408,
+          "cacheWrite": 0,
+          "reasoning": 0,
+          "totalTokens": 1476,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1789995535183,
+        "responseId": "20260921205906f098c33ceea54221",
+        "rawStopReason": "tool_calls"
+      },
+      {
+        "role": "toolResult",
+        "toolCallId": "call_a5ee631a1e0645d8bfc0f42c",
+        "toolName": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "export const item1_1 = { id: 1000, label: 'entry 1-1', weight: 1 }\nexport const item1_2 = { id: 1001, label: 'entry 1-2', weight: 8 }\nexport const item1_3 = { id: 1002, label: 'entry 1-3', weight: 15 }\nexport const item1_4 = { id: 1003, label: 'entry 1-4', weight: 22 }\nexport const item1_5 = { id: 1004, label: 'entry 1-5', weight: 29 }\nexport const item1_6 = { id: 1005, label: 'entry 1-6', weight: 36 }\nexport const item1_7 = { id: 1006, label: 'entry 1-7', weight: 43 }\nexport const item1_8 = { id: 1007, label: 'entry 1-8', weight: 50 }\nexport const item1_9 = { id: 1008, label: 'entry 1-9', weight: 57 }\nexport const item1_10 = { id: 1009, label: 'entry 1-10', weight: 64 }\nexport const item1_11 = { id: 1010, label: 'entry 1-11', weight: 71 }\nexport const item1_12 = { id: 1011, label: 'entry 1-12', weight: 78 }\nexport const item1_13 = { id: 1012, label: 'entry 1-13', weight: 85 }\nexport const item1_14 = { id: 1013, label: 'entry 1-14', weight: 92 }\nexport const item1_15 = { id: 1014, label: 'entry 1-15', weight: 2 }\nexport const item1_16 = { id: 1015, label: 'entry 1-16', weight: 9 }\nexport const item1_17 = { id: 1016, label: 'entry 1-17', weight: 16 }\nexport const item1_18 = { id: 1017, label: 'entry 1-18', weight: 23 }\nexport const item1_19 = { id: 1018, label: 'entry 1-19', weight: 30 }\nexport const item1_20 = { id: 1019, label: 'entry 1-20', weight: 37 }\nexport const item1_21 = { id: 1020, label: 'entry 1-21', weight: 44 }\nexport const item1_22 = { id: 1021, label: 'entry 1-22', weight: 51 }\nexport const item1_23 = { id: 1022, label: 'entry 1-23', weight: 58 }\nexport const item1_24 = { id: 1023, label: 'entry 1-24', weight: 65 }\nexport const item1_25 = { id: 1024, label: 'entry 1-25', weight: 72 }\nexport const item1_26 = { id: 1025, label: 'entry 1-26', weight: 79 }\nexport const item1_27 = { id: 1026, label: 'entry 1-27', weight: 86 }\nexport const item1_28 = { id: 1027, label: 'entry 1-28', weight: 93 }\nexport const item1_29 = { id: 1028, label: 'entry 1-29', weight: 3 }\nexport const item1_30 = { id: 1029, label: 'entry 1-30', weight: 10 }\nexport const item1_31 = { id: 1030, label: 'entry 1-31', weight: 17 }\nexport const item1_32 = { id: 1031, label: 'entry 1-32', weight: 24 }\nexport const item1_33 = { id: 1032, label: 'entry 1-33', weight: 31 }\nexport const item1_34 = { id: 1033, label: 'entry 1-34', weight: 38 }\nexport const item1_35 = { id: 1034, label: 'entry 1-35', weight: 45 }\nexport const item1_36 = { id: 1035, label: 'entry 1-36', weight: 52 }\nexport const item1_37 = { id: 1036, label: 'entry 1-37', weight: 59 }\nexport const item1_38 = { id: 1037, label: 'entry 1-38', weight: 66 }\nexport const item1_39 = { id: 1038, label: 'entry 1-39', weight: 73 }\nexport const item1_40 = { id: 1039, label: 'entry 1-40', weight: 80 }\nexport const item1_41 = { id: 1040, label: 'entry 1-41', weight: 87 }\nexport const item1_42 = { id: 1041, label: 'entry 1-42', weight: 94 }\nexport const item1_43 = { id: 1042, label: 'entry 1-43', weight: 4 }\nexport const item1_44 = { id: 1043, label: 'entry 1-44', weight: 11 }\nexport const item1_45 = { id: 1044, label: 'entry 1-45', weight: 18 }\nexport const item1_46 = { id: 1045, label: 'entry 1-46', weight: 25 }\nexport const item1_47 = { id: 1046, label: 'entry 1-47', weight: 32 }\nexport const item1_48 = { id: 1047, label: 'entry 1-48', weight: 39 }\nexport const item1_49 = { id: 1048, label: 'entry 1-49', weight: 46 }\nexport const item1_50 = { id: 1049, label: 'entry 1-50', weight: 53 }\nexport const item1_51 = { id: 1050, label: 'entry 1-51', weight: 60 }\nexport const item1_52 = { id: 1051, label: 'entry 1-52', weight: 67 }\nexport const item1_53 = { id: 1052, label: 'entry 1-53', weight: 74 }\nexport const item1_54 = { id: 1053, label: 'entry 1-54', weight: 81 }\nexport const item1_55 = { id: 1054, label: 'entry 1-55', weight: 88 }\nexport const item1_56 = { id: 1055, label: 'entry 1-56', weight: 95 }\nexport const item1_57 = { id: 1056, label: 'entry 1-57', weight: 5 }\nexport const item1_58 = { id: 1057, label: 'entry 1-58', weight: 12 }\nexport const item1_59 = { id: 1058, label: 'entry 1-59', weight: 19 }\nexport const item1_60 = { id: 1059, label: 'entry 1-60', weight: 26 }\nexport const item1_61 = { id: 1060, label: 'entry 1-61', weight: 33 }\nexport const item1_62 = { id: 1061, label: 'entry 1-62', weight: 40 }\nexport const item1_63 = { id: 1062, label: 'entry 1-63', weight: 47 }\nexport const item1_64 = { id: 1063, label: 'entry 1-64', weight: 54 }\nexport const item1_65 = { id: 1064, label: 'entry 1-65', weight: 61 }\nexport const item1_66 = { id: 1065, label: 'entry 1-66', weight: 68 }\nexport const item1_67 = { id: 1066, label: 'entry 1-67', weight: 75 }\nexport const item1_68 = { id: 1067, label: 'entry 1-68', weight: 82 }\nexport const item1_69 = { id: 1068, label: 'entry 1-69', weight: 89 }\nexport const item1_70 = { id: 1069, label: 'entry 1-70', weight: 96 }\nexport const item1_71 = { id: 1070, label: 'entry 1-71', weight: 6 }\nexport const item1_72 = { id: 1071, label: 'entry 1-72', weight: 13 }\nexport const item1_73 = { id: 1072, label: 'entry 1-73', weight: 20 }\nexport const item1_74 = { id: 1073, label: 'entry 1-74', weight: 27 }\nexport const item1_75 = { id: 1074, label: 'entry 1-75', weight: 34 }\nexport const item1_76 = { id: 1075, label: 'entry 1-76', weight: 41 }\nexport const item1_77 = { id: 1076, label: 'entry 1-77', weight: 48 }\nexport const item1_78 = { id: 1077, label: 'entry 1-78', weight: 55 }\nexport const item1_79 = { id: 1078, label: 'entry 1-79', weight: 62 }\nexport const item1_80 = { id: 1079, label: 'entry 1-80', weight: 69 }\nexport const item1_81 = { id: 1080, label: 'entry 1-81', weight: 76 }\nexport const item1_82 = { id: 1081, label: 'entry 1-82', weight: 83 }\nexport const item1_83 = { id: 1082, label: 'entry 1-83', weight: 90 }\nexport const item1_84 = { id: 1083, label: 'entry 1-84', weight: 0 }\nexport const item1_85 = { id: 1084, label: 'entry 1-85', weight: 7 }\nexport const item1_86 = { id: 1085, label: 'entry 1-86', weight: 14 }\nexport const item1_87 = { id: 1086, label: 'entry 1-87', weight: 21 }\nexport const item1_88 = { id: 1087, label: 'entry 1-88', weight: 28 }\nexport const item1_89 = { id: 1088, label: 'entry 1-89', weight: 35 }\nexport const item1_90 = { id: 1089, label: 'entry 1-90', weight: 42 }\n"
+          }
+        ],
+        "isError": false,
+        "timestamp": 1789995536962
+      }
+    ],
+    "isSplitTurn": true,
+    "tokensBefore": 4057,
+    "fileOps": {
+      "read": [
+        "src/data1.ts"
+      ],
+      "written": [],
+      "edited": []
+    },
+    "settings": {
+      "enabled": true,
+      "reserveTokens": 996000,
+      "keepRecentTokens": 600
+    }
+  },
+  "branchEntries": [
+    {
+      "type": "model_change",
+      "id": "ce63e052",
+      "parentId": null,
+      "timestamp": "2026-09-21T12:58:55.167Z",
+      "provider": "zhipu",
+      "modelId": "glm-5.3"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "8fe3bd6b",
+      "parentId": "ce63e052",
+      "timestamp": "2026-09-21T12:58:55.168Z",
+      "thinkingLevel": "off"
+    },
+    {
+      "type": "message",
+      "id": "4199e2fe",
+      "parentId": "8fe3bd6b",
+      "timestamp": "2026-09-21T12:58:55.174Z",
+      "message": {
+        "role": "system",
+        "content": "",
+        "sections": {
+          "preamble": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.",
+          "tools": "<tools>\n- read: Read file contents\n- bash: Execute bash commands (ls, grep, find, etc.)\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
+          "rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- Use read to examine files instead of cat or sed.\n- You can inspect PI_* environment variables for current model and session details.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
+          "docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: /opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
+          "cwd": "<cwd>\n/workspace/demo-threshold\n</cwd>"
+        },
+        "timestamp": 1789995535173,
+        "toolsAdded": [
+          {
+            "name": "read",
+            "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+            "parameters": {
+              "type": "object",
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the file to read (relative or absolute)"
+                },
+                "offset": {
+                  "type": "number",
+                  "description": "Line number to start reading from (1-indexed)"
+                },
+                "limit": {
+                  "type": "number",
+                  "description": "Maximum number of lines to read"
+                }
+              }
+            },
+            "constrainedSampling": {
+              "type": "json_schema",
+              "strict": "prefer"
+            }
+          },
+          {
+            "name": "bash",
+            "description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
+            "parameters": {
+              "type": "object",
+              "required": [
+                "command"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "Shell command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Timeout in seconds (optional, no default timeout)"
+                }
+              }
+            },
+            "constrainedSampling": {
+              "type": "json_schema",
+              "strict": "prefer"
+            }
+          },
+          {
+            "name": "edit",
+            "description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
+            "parameters": {
+              "type": "object",
+              "required": [
+                "path",
+                "edits"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the file to edit (relative or absolute)"
+                },
+                "edits": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "oldText",
+                      "newText"
+                    ],
+                    "properties": {
+                      "oldText": {
+                        "type": "string",
+                        "description": "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."
+                      },
+                      "newText": {
+                        "type": "string",
+                        "description": "Replacement text for this targeted edit."
+                      }
+                    }
+                  },
+                  "description": "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."
+                }
+              }
+            },
+            "constrainedSampling": {
+              "type": "json_schema",
+              "strict": "prefer"
+            }
+          },
+          {
+            "name": "write",
+            "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
+            "parameters": {
+              "type": "object",
+              "required": [
+                "path",
+                "content"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the file to write (relative or absolute)"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Content to write to the file"
+                }
+              }
+            },
+            "constrainedSampling": {
+              "type": "json_schema",
+              "strict": "prefer"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "0577447e",
+      "parentId": "4199e2fe",
+      "timestamp": "2026-09-21T12:58:55.174Z",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Read src/data1.ts and tell me how many exported constants it has."
+          }
+        ],
+        "timestamp": 1789995535172
+      }
+    },
+    {
+      "type": "message",
+      "id": "3472d40b",
+      "parentId": "0577447e",
+      "timestamp": "2026-09-21T12:58:56.958Z",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "toolCall",
+            "id": "call_a5ee631a1e0645d8bfc0f42c",
+            "name": "read",
+            "arguments": {
+              "path": "src/data1.ts"
+            }
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "zhipu",
+        "model": "glm-5.3",
+        "usage": {
+          "input": 54,
+          "output": 14,
+          "cacheRead": 1408,
+          "cacheWrite": 0,
+          "reasoning": 0,
+          "totalTokens": 1476,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1789995535183,
+        "responseId": "20260921205906f098c33ceea54221",
+        "rawStopReason": "tool_calls"
+      }
+    },
+    {
+      "type": "message",
+      "id": "c513efe1",
+      "parentId": "3472d40b",
+      "timestamp": "2026-09-21T12:58:56.963Z",
+      "message": {
+        "role": "toolResult",
+        "toolCallId": "call_a5ee631a1e0645d8bfc0f42c",
+        "toolName": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "export const item1_1 = { id: 1000, label: 'entry 1-1', weight: 1 }\nexport const item1_2 = { id: 1001, label: 'entry 1-2', weight: 8 }\nexport const item1_3 = { id: 1002, label: 'entry 1-3', weight: 15 }\nexport const item1_4 = { id: 1003, label: 'entry 1-4', weight: 22 }\nexport const item1_5 = { id: 1004, label: 'entry 1-5', weight: 29 }\nexport const item1_6 = { id: 1005, label: 'entry 1-6', weight: 36 }\nexport const item1_7 = { id: 1006, label: 'entry 1-7', weight: 43 }\nexport const item1_8 = { id: 1007, label: 'entry 1-8', weight: 50 }\nexport const item1_9 = { id: 1008, label: 'entry 1-9', weight: 57 }\nexport const item1_10 = { id: 1009, label: 'entry 1-10', weight: 64 }\nexport const item1_11 = { id: 1010, label: 'entry 1-11', weight: 71 }\nexport const item1_12 = { id: 1011, label: 'entry 1-12', weight: 78 }\nexport const item1_13 = { id: 1012, label: 'entry 1-13', weight: 85 }\nexport const item1_14 = { id: 1013, label: 'entry 1-14', weight: 92 }\nexport const item1_15 = { id: 1014, label: 'entry 1-15', weight: 2 }\nexport const item1_16 = { id: 1015, label: 'entry 1-16', weight: 9 }\nexport const item1_17 = { id: 1016, label: 'entry 1-17', weight: 16 }\nexport const item1_18 = { id: 1017, label: 'entry 1-18', weight: 23 }\nexport const item1_19 = { id: 1018, label: 'entry 1-19', weight: 30 }\nexport const item1_20 = { id: 1019, label: 'entry 1-20', weight: 37 }\nexport const item1_21 = { id: 1020, label: 'entry 1-21', weight: 44 }\nexport const item1_22 = { id: 1021, label: 'entry 1-22', weight: 51 }\nexport const item1_23 = { id: 1022, label: 'entry 1-23', weight: 58 }\nexport const item1_24 = { id: 1023, label: 'entry 1-24', weight: 65 }\nexport const item1_25 = { id: 1024, label: 'entry 1-25', weight: 72 }\nexport const item1_26 = { id: 1025, label: 'entry 1-26', weight: 79 }\nexport const item1_27 = { id: 1026, label: 'entry 1-27', weight: 86 }\nexport const item1_28 = { id: 1027, label: 'entry 1-28', weight: 93 }\nexport const item1_29 = { id: 1028, label: 'entry 1-29', weight: 3 }\nexport const item1_30 = { id: 1029, label: 'entry 1-30', weight: 10 }\nexport const item1_31 = { id: 1030, label: 'entry 1-31', weight: 17 }\nexport const item1_32 = { id: 1031, label: 'entry 1-32', weight: 24 }\nexport const item1_33 = { id: 1032, label: 'entry 1-33', weight: 31 }\nexport const item1_34 = { id: 1033, label: 'entry 1-34', weight: 38 }\nexport const item1_35 = { id: 1034, label: 'entry 1-35', weight: 45 }\nexport const item1_36 = { id: 1035, label: 'entry 1-36', weight: 52 }\nexport const item1_37 = { id: 1036, label: 'entry 1-37', weight: 59 }\nexport const item1_38 = { id: 1037, label: 'entry 1-38', weight: 66 }\nexport const item1_39 = { id: 1038, label: 'entry 1-39', weight: 73 }\nexport const item1_40 = { id: 1039, label: 'entry 1-40', weight: 80 }\nexport const item1_41 = { id: 1040, label: 'entry 1-41', weight: 87 }\nexport const item1_42 = { id: 1041, label: 'entry 1-42', weight: 94 }\nexport const item1_43 = { id: 1042, label: 'entry 1-43', weight: 4 }\nexport const item1_44 = { id: 1043, label: 'entry 1-44', weight: 11 }\nexport const item1_45 = { id: 1044, label: 'entry 1-45', weight: 18 }\nexport const item1_46 = { id: 1045, label: 'entry 1-46', weight: 25 }\nexport const item1_47 = { id: 1046, label: 'entry 1-47', weight: 32 }\nexport const item1_48 = { id: 1047, label: 'entry 1-48', weight: 39 }\nexport const item1_49 = { id: 1048, label: 'entry 1-49', weight: 46 }\nexport const item1_50 = { id: 1049, label: 'entry 1-50', weight: 53 }\nexport const item1_51 = { id: 1050, label: 'entry 1-51', weight: 60 }\nexport const item1_52 = { id: 1051, label: 'entry 1-52', weight: 67 }\nexport const item1_53 = { id: 1052, label: 'entry 1-53', weight: 74 }\nexport const item1_54 = { id: 1053, label: 'entry 1-54', weight: 81 }\nexport const item1_55 = { id: 1054, label: 'entry 1-55', weight: 88 }\nexport const item1_56 = { id: 1055, label: 'entry 1-56', weight: 95 }\nexport const item1_57 = { id: 1056, label: 'entry 1-57', weight: 5 }\nexport const item1_58 = { id: 1057, label: 'entry 1-58', weight: 12 }\nexport const item1_59 = { id: 1058, label: 'entry 1-59', weight: 19 }\nexport const item1_60 = { id: 1059, label: 'entry 1-60', weight: 26 }\nexport const item1_61 = { id: 1060, label: 'entry 1-61', weight: 33 }\nexport const item1_62 = { id: 1061, label: 'entry 1-62', weight: 40 }\nexport const item1_63 = { id: 1062, label: 'entry 1-63', weight: 47 }\nexport const item1_64 = { id: 1063, label: 'entry 1-64', weight: 54 }\nexport const item1_65 = { id: 1064, label: 'entry 1-65', weight: 61 }\nexport const item1_66 = { id: 1065, label: 'entry 1-66', weight: 68 }\nexport const item1_67 = { id: 1066, label: 'entry 1-67', weight: 75 }\nexport const item1_68 = { id: 1067, label: 'entry 1-68', weight: 82 }\nexport const item1_69 = { id: 1068, label: 'entry 1-69', weight: 89 }\nexport const item1_70 = { id: 1069, label: 'entry 1-70', weight: 96 }\nexport const item1_71 = { id: 1070, label: 'entry 1-71', weight: 6 }\nexport const item1_72 = { id: 1071, label: 'entry 1-72', weight: 13 }\nexport const item1_73 = { id: 1072, label: 'entry 1-73', weight: 20 }\nexport const item1_74 = { id: 1073, label: 'entry 1-74', weight: 27 }\nexport const item1_75 = { id: 1074, label: 'entry 1-75', weight: 34 }\nexport const item1_76 = { id: 1075, label: 'entry 1-76', weight: 41 }\nexport const item1_77 = { id: 1076, label: 'entry 1-77', weight: 48 }\nexport const item1_78 = { id: 1077, label: 'entry 1-78', weight: 55 }\nexport const item1_79 = { id: 1078, label: 'entry 1-79', weight: 62 }\nexport const item1_80 = { id: 1079, label: 'entry 1-80', weight: 69 }\nexport const item1_81 = { id: 1080, label: 'entry 1-81', weight: 76 }\nexport const item1_82 = { id: 1081, label: 'entry 1-82', weight: 83 }\nexport const item1_83 = { id: 1082, label: 'entry 1-83', weight: 90 }\nexport const item1_84 = { id: 1083, label: 'entry 1-84', weight: 0 }\nexport const item1_85 = { id: 1084, label: 'entry 1-85', weight: 7 }\nexport const item1_86 = { id: 1085, label: 'entry 1-86', weight: 14 }\nexport const item1_87 = { id: 1086, label: 'entry 1-87', weight: 21 }\nexport const item1_88 = { id: 1087, label: 'entry 1-88', weight: 28 }\nexport const item1_89 = { id: 1088, label: 'entry 1-89', weight: 35 }\nexport const item1_90 = { id: 1089, label: 'entry 1-90', weight: 42 }\n"
+          }
+        ],
+        "isError": false,
+        "timestamp": 1789995536962
+      }
+    },
+    {
+      "type": "message",
+      "id": "ef42e912",
+      "parentId": "c513efe1",
+      "timestamp": "2026-09-21T12:58:58.713Z",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "90 constants, item1_1 through item1_90.",
+            "thinkingSignature": "reasoning_content"
+          },
+          {
+            "type": "text",
+            "text": "`src/data1.ts` has **90 exported constants** (`item1_1` through `item1_90`), each an object with `id`, `label`, and `weight` properties."
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "zhipu",
+        "model": "glm-5.3",
+        "usage": {
+          "input": 32,
+          "output": 57,
+          "cacheRead": 3968,
+          "cacheWrite": 0,
+          "reasoning": 13,
+          "totalTokens": 4057,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1789995536964,
+        "responseId": "20260921205908529231abe0a24b22",
+        "rawStopReason": "stop"
+      }
+    }
+  ],
+  "reason": "threshold",
+  "willRetry": false
+}

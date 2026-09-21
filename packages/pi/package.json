@@ -1,0 +1,24 @@
+{
+  "name": "@maskpoint/pi",
+  "version": "0.0.0",
+  "description": "Maskpoint for Pi: compaction that masks stale observations instead of asking a model to summarize them.",
+  "keywords": [
+    "pi-package"
+  ],
+  "type": "module",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/extension.ts"
+    ]
+  },
+  "dependencies": {
+    "@maskpoint/core": "0.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
