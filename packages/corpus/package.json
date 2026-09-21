@@ -1,0 +1,13 @@
+{
+  "name": "@maskpoint/corpus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sanitized conversation corpus, sanitization check, and replay harness. Test and development tooling only.",
+  "type": "module",
+  "dependencies": {
+    "@maskpoint/core": "0.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
