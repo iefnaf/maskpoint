@@ -1,7 +1,5 @@
 import { estimateTokens } from './estimate.js'
-import type { Item, Stats } from './vocabulary.js'
-
-type ToolResult = Extract<Item, { kind: 'tool-result' }>
+import type { Item, Stats, ToolResultItem } from './vocabulary.js'
 
 /** What masking measures. `candidateTokens` belongs to accumulation, which owns the candidate. */
 export type MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>
@@ -11,10 +9,20 @@ export class MaskingError extends Error {
   override readonly name = 'MaskingError'
 }
 
-/** Every placeholder starts like this, which is how an already-masked observation is recognized. */
-const PLACEHOLDER = /^\[tool result omitted: [^\]\n]*\]/
+/**
+ * A body that is nothing but one of our placeholders. Matched in full, not by prefix: an observation
+ * that merely begins this way is still an observation and must still be masked.
+ */
+const PLACEHOLDER = /^\[tool result omitted: [^\]\n]*\]$/
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+
+/** Characters as a reader counts them (code points), not UTF-16 units. */
+function countChars(text: string): number {
+  let count = 0
+  for (const _ of text) count++
+  return count
+}
 
 function countLines(text: string): number {
   if (text === '') return 0
@@ -26,38 +34,41 @@ function countLines(text: string): number {
  * The placeholder for an observation: what it was and how much was dropped — never any of the body.
  * `omitted` is the text being dropped, `media` the number of payloads being dropped.
  */
-function placeholderFor(item: ToolResult, omitted: string | undefined, media: number): string {
+function placeholderFor(item: ToolResultItem, omitted: string | undefined, media: number): string {
   const fields: string[] = []
-  if (item.name !== undefined && item.name !== '') fields.push(item.name)
+  // The name comes from the host; keep it from closing the bracket or starting a new line.
+  if (item.name !== undefined && item.name !== '') fields.push(item.name.replace(/[[\]\r\n]/g, '_'))
   fields.push(item.status)
   if (item.exitCode !== undefined) fields.push(`exit ${item.exitCode}`)
-  if (omitted !== undefined) fields.push(plural(countLines(omitted), 'line'), plural(omitted.length, 'char'))
+  if (omitted !== undefined) fields.push(plural(countLines(omitted), 'line'), plural(countChars(omitted), 'char'))
   if (media > 0) fields.push(plural(media, 'image'))
   return `[tool result omitted: ${fields.join(', ')}]`
 }
 
-const replaced = (item: ToolResult, text: string): ToolResult => ({ ...item, text, media: 0, masked: true })
+const replaced = (item: ToolResultItem, text: string): ToolResultItem => ({ ...item, text, media: 0, masked: true })
 
 /** The masked observation and how many characters of text it dropped, or undefined to leave it alone. */
-function maskObservation(item: ToolResult): { item: ToolResult; charsOmitted: number } | undefined {
-  // Idempotence: a placeholder — ours, or a host pruner's flagged one — is already what masking makes.
+function maskObservation(item: ToolResultItem): { item: ToolResultItem; charsOmitted: number } | undefined {
+  // Idempotence: a placeholder is already what masking makes. A host pruner's placeholder is
+  // recognized by the `masked` flag its adapter sets when normalizing (see the Item vocabulary);
+  // ours is also recognized by its exact text, in case that flag was lost on the way through.
   if (item.masked === true) return undefined
   const body = item.text ?? ''
   if (PLACEHOLDER.test(body)) return undefined
 
   // No-expansion: a text placeholder must be strictly smaller than what it replaces, by the same
   // estimator the budget uses. Otherwise the text stays as it was.
-  const replacement = body === '' ? undefined : placeholderFor(item, body, item.media)
-  const shrinks = replacement !== undefined && estimateTokens(replacement) < estimateTokens(body)
-
-  if (item.media === 0) return shrinks ? { item: replaced(item, replacement!), charsOmitted: body.length } : undefined
+  const bodyPlaceholder = body === '' ? undefined : placeholderFor(item, body, item.media)
+  if (bodyPlaceholder !== undefined && estimateTokens(bodyPlaceholder) < estimateTokens(body)) {
+    return { item: replaced(item, bodyPlaceholder), charsOmitted: countChars(body) }
+  }
+  if (item.media === 0) return undefined
 
   // An image payload is dropped whatever its text costs: the estimator only sees text, and images
   // are the worst context-per-information item in a session. Text that travelled with it is
   // metadata, kept when it is small and masked like any other body when it is not.
-  if (shrinks) return { item: replaced(item, replacement!), charsOmitted: body.length }
-  const note = placeholderFor(item, undefined, item.media)
-  return { item: replaced(item, body === '' ? note : `${note} ${body}`), charsOmitted: 0 }
+  const imageNote = placeholderFor(item, undefined, item.media)
+  return { item: replaced(item, body === '' ? imageNote : `${imageNote} ${body}`), charsOmitted: 0 }
 }
 
 /**

@@ -1,4 +1,4 @@
-import { type Artifact, type Item, maskItems, type Renderer, type Stats } from '@maskpoint/core'
+import { type Artifact, type Item, type MaskStats, maskItems, type Renderer } from '@maskpoint/core'
 import type { CorpusFixture } from './corpus.js'
 import { boundaryIndex, payload } from './items.js'
 
@@ -7,7 +7,7 @@ export interface ReplayEngine {
   name: string
   /** Set to false for an engine that returns history unmasked, so the replay can say so. */
   masks?: false
-  mask(evicted: Item[]): { items: Item[]; stats: Pick<Stats, 'observationsMasked' | 'charsOmitted'> }
+  mask(evicted: Item[]): { items: Item[]; stats: MaskStats }
 }
 
 /** The real masking engine from `@maskpoint/core`, applied to the newly evicted span. */

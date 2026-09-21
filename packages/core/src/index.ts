@@ -14,5 +14,6 @@ export type {
   Outcome,
   Renderer,
   Stats,
+  ToolResultItem,
   Usage,
 } from './vocabulary.js'

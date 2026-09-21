@@ -1,11 +1,10 @@
-import { estimateTokens, type Item, maskSpan } from '@maskpoint/core'
+import { estimateTokens, type Item, maskSpan, type ToolResultItem as ToolResult } from '@maskpoint/core'
 import { describe, expect, it } from 'vitest'
 import { type CorpusFixture, loadCorpus } from '../src/corpus.js'
 import { boundaryIndex, payload } from '../src/items.js'
 
 /** Seam 1: the engine over neutral snapshots, driven by the shared corpus. No host, no model, no network. */
 
-type ToolResult = Extract<Item, { kind: 'tool-result' }>
 const corpus = loadCorpus()
 const fixture = (name: string): CorpusFixture => {
   const found = corpus.find((each) => each.name === name)

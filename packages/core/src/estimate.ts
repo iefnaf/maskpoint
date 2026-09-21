@@ -1,13 +1,3 @@
-/**
- * Estimated token count for a piece of text. This is the single estimator in the system: the
- * no-expansion rule in masking and the checkpoint budget both use it, so they agree by construction.
- *
- * Deliberately conservative — it overestimates rather than under — and weights by kind of character
- * instead of counting characters alike: CJK characters cost more than one token each, and the
- * punctuation that dominates source code costs more than prose. Calibration against host meters is
- * an open issue in docs/design.md; treat the constants as tuning parameters.
- */
-
 /** Cost of one code point, in quarter-tokens, so the arithmetic stays in integers. */
 const QUARTERS_CJK = 6
 const QUARTERS_OTHER_NON_ASCII = 4
@@ -35,6 +25,15 @@ function isAsciiSymbol(codePoint: number): boolean {
   )
 }
 
+/**
+ * Estimated token count for a piece of text. This is the single estimator in the system: the
+ * no-expansion rule in masking and the checkpoint budget both use it, so they agree by construction.
+ *
+ * Deliberately conservative — it overestimates rather than under — and weights by kind of character
+ * instead of counting characters alike: CJK characters cost more than one token each, and the
+ * punctuation that dominates source code costs more than prose. Calibration against host meters is
+ * an open issue in docs/design.md; treat the constants as tuning parameters.
+ */
 export function estimateTokens(text: string): number {
   let quarters = 0
   for (const character of text) {

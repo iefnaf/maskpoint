@@ -194,6 +194,9 @@ function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; sta
 // MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>: candidateTokens belongs to accumulation.
 // maskSpan returns only the compacted side (everything before the boundary) and throws MaskingError
 // when the boundary or ids cannot be trusted, which an adapter turns into a decline.
+function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
+// maskSpan without the boundary: masks a span the caller has already cut, e.g. the newly evicted
+// items once accumulation has dropped what earlier state already represents.
 ```
 
 ## Algorithms

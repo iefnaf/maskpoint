@@ -36,6 +36,9 @@ export type Item =
 
 export type ItemKind = Item['kind']
 
+/** An observation: the item masking replaces the body of. */
+export type ToolResultItem = Extract<Item, { kind: 'tool-result' }>
+
 export interface ConversationSnapshot {
   items: Item[]
   /**
