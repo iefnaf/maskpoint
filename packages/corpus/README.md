@@ -23,8 +23,13 @@ npx tsx packages/corpus/src/cli.ts list
 npx tsx packages/corpus/src/cli.ts check <path>   # sanitize arbitrary files or directories
 ```
 
-`replay` uses a pass-through engine and says so in its output; nothing is masked until the
-masking engine lands and is wired in as a `ReplayEngine`.
+`replay` runs the real masking engine from `@maskpoint/core` (`maskingEngine`). A `ReplayEngine` that
+does not mask, such as `passThroughEngine`, says so in its output so unmasked history is never
+mistaken for masked history.
+
+`test/masking.test.ts` is Seam 1 for masking: it applies `maskSpan` to every fixture and asserts
+the invariants the design lists (order, only observation bodies removed, no-expansion,
+idempotence, retained region untouched) plus shape-specific expectations.
 
 ## Adding a fixture
 

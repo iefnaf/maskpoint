@@ -21,6 +21,14 @@ describe('cli replay', () => {
     expect(out).toContain('== statistics ==')
   })
 
+  it('replays with the real masking engine: bodies are out and the report does not call itself a pass-through', () => {
+    const { out } = run('replay', 'shell-execution')
+    expect(out).toContain('engine: maskpoint masking')
+    expect(out).not.toMatch(/pass-through|does not mask/i)
+    expect(out).toContain('[tool result omitted:')
+    expect(out).not.toMatch(/observationsMasked: 0\b/)
+  })
+
   it('rejects an unknown fixture and lists the ones that exist', () => {
     const { code, out, err } = run('replay', 'no-such-fixture')
     expect(code).toBe(1)
