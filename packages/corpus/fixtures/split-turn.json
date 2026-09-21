@@ -1,0 +1,139 @@
+{
+  "items": [
+    {
+      "id": "i01",
+      "kind": "user",
+      "text": "Rename the `Widget` component to `Panel` everywhere and update the docs."
+    },
+    {
+      "id": "i02",
+      "kind": "assistant-text",
+      "text": "I will find every usage first."
+    },
+    {
+      "id": "i03",
+      "kind": "tool-call",
+      "name": "grep",
+      "callId": "call_24",
+      "args": "{\"pattern\":\"Widget\",\"path\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i04",
+      "kind": "tool-result",
+      "name": "grep",
+      "callId": "call_24",
+      "status": "ok",
+      "text": "/workspace/app/src/ui/file1.tsx:10:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file2.tsx:11:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file3.tsx:12:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file4.tsx:13:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file5.tsx:14:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file6.tsx:15:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file7.tsx:16:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file8.tsx:17:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file9.tsx:18:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file10.tsx:19:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file11.tsx:20:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file12.tsx:21:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file13.tsx:22:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file14.tsx:23:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file15.tsx:24:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file16.tsx:25:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file17.tsx:26:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file18.tsx:27:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file19.tsx:28:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file20.tsx:29:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file21.tsx:30:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file22.tsx:31:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file23.tsx:32:import { Widget } from './Widget.js'\n/workspace/app/src/ui/file24.tsx:33:import { Widget } from './Widget.js'",
+      "media": 0
+    },
+    {
+      "id": "i05",
+      "kind": "assistant-reasoning",
+      "text": "There are 24 import sites plus the component file and two docs pages. A scripted replace is safer than 27 manual edits."
+    },
+    {
+      "id": "i06",
+      "kind": "tool-call",
+      "name": "bash",
+      "callId": "call_25",
+      "args": "{\"command\":\"sed -i.bak 's/Widget/Panel/g' src/ui/*.tsx\",\"cwd\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i07",
+      "kind": "tool-result",
+      "name": "bash",
+      "callId": "call_25",
+      "status": "ok",
+      "text": "",
+      "media": 0,
+      "exitCode": 0
+    },
+    {
+      "id": "i08",
+      "kind": "tool-call",
+      "name": "bash",
+      "callId": "call_26",
+      "args": "{\"command\":\"git mv src/ui/Widget.tsx src/ui/Panel.tsx\",\"cwd\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i09",
+      "kind": "tool-result",
+      "name": "bash",
+      "callId": "call_26",
+      "status": "ok",
+      "text": "",
+      "media": 0,
+      "exitCode": 0
+    },
+    {
+      "id": "i10",
+      "kind": "assistant-text",
+      "text": "Source files are renamed. Now checking that the project still type-checks."
+    },
+    {
+      "id": "i11",
+      "kind": "tool-call",
+      "name": "bash",
+      "callId": "call_27",
+      "args": "{\"command\":\"npx tsc --noEmit\",\"cwd\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i12",
+      "kind": "tool-result",
+      "name": "bash",
+      "callId": "call_27",
+      "status": "error",
+      "text": "src/ui/file1.tsx(12,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.\nsrc/ui/file2.tsx(13,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.\nsrc/ui/file3.tsx(14,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.\nsrc/ui/file4.tsx(15,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.\nsrc/ui/file5.tsx(16,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.\nsrc/ui/file6.tsx(17,10): error TS2305: Module './Widget.js' has no exported member 'Panel'.",
+      "media": 0,
+      "exitCode": 2
+    },
+    {
+      "id": "i13",
+      "kind": "assistant-text",
+      "text": "The import paths still point at Widget.js. Fixing those next."
+    },
+    {
+      "id": "i14",
+      "kind": "tool-call",
+      "name": "bash",
+      "callId": "call_28",
+      "args": "{\"command\":\"sed -i.bak \\\"s#'./Widget.js'#'./Panel.js'#g\\\" src/ui/*.tsx\",\"cwd\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i15",
+      "kind": "tool-result",
+      "name": "bash",
+      "callId": "call_28",
+      "status": "ok",
+      "text": "",
+      "media": 0,
+      "exitCode": 0
+    },
+    {
+      "id": "i16",
+      "kind": "tool-call",
+      "name": "bash",
+      "callId": "call_29",
+      "args": "{\"command\":\"npx tsc --noEmit\",\"cwd\":\"/workspace/app\"}"
+    },
+    {
+      "id": "i17",
+      "kind": "tool-result",
+      "name": "bash",
+      "callId": "call_29",
+      "status": "ok",
+      "text": "",
+      "media": 0,
+      "exitCode": 0
+    },
+    {
+      "id": "i18",
+      "kind": "assistant-text",
+      "text": "Type-checking is clean. Docs are the only thing left."
+    }
+  ],
+  "boundary": {
+    "id": "i13"
+  },
+  "reason": "overflow"
+}

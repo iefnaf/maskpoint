@@ -1,0 +1,49 @@
+{
+  "fixtures": [
+    {
+      "name": "text-observations",
+      "file": "text-observations.json",
+      "description": "A short fix-it session: text reads and greps, a missing-file error, a tiny \"OK\" result and an empty result. The retained region starts at the second user turn."
+    },
+    {
+      "name": "shell-execution",
+      "file": "shell-execution.json",
+      "description": "Shell commands preserved as tool calls: a failing test run (exit 1), a clean run (exit 0), a silent non-zero grep, and short git output."
+    },
+    {
+      "name": "image-observations",
+      "file": "image-observations.json",
+      "description": "Image tool results: a screenshot with text metadata, a screenshot with no text at all, and a two-image result, alongside ordinary text results."
+    },
+    {
+      "name": "parallel-tool-calls",
+      "file": "parallel-tool-calls.json",
+      "description": "Assistant turns that issue several tool calls back to back, with results returned out of call order and interleaved between two requests."
+    },
+    {
+      "name": "split-turn",
+      "file": "split-turn.json",
+      "description": "One long turn whose cut lands mid-turn: the request and early actions fall in the compacted span, the recent actions are retained."
+    },
+    {
+      "name": "host-context",
+      "file": "host-context.json",
+      "description": "Host-injected context (project rules, environment, reminders), an unrecognized host event, and a checkpoint from a prior compaction with accumulation state (previousCheckpoint and evictedThrough)."
+    },
+    {
+      "name": "cjk",
+      "file": "cjk.json",
+      "description": "Chinese and Japanese user text, reasoning, tool output and custom instructions, mixed with English identifiers and JSON, to exercise conservative token estimation."
+    },
+    {
+      "name": "code-heavy",
+      "file": "code-heavy.json",
+      "description": "Bulky code observations: a large source module, a multi-hunk unified diff, a JSON lockfile, and a tool call whose arguments are a whole file."
+    },
+    {
+      "name": "pre-masked",
+      "file": "pre-masked.json",
+      "description": "Observations already replaced by a host-side pruner (masked: true, including an image), mixed with untouched ones, so masking must be idempotent and must not re-wrap placeholders."
+    }
+  ]
+}
