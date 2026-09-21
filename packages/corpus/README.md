@@ -31,6 +31,11 @@ mistaken for masked history.
 the invariants the design lists (order, only observation bodies removed, no-expansion,
 idempotence, retained region untouched) plus shape-specific expectations.
 
+`test/decision.test.ts` is Seam 1 for accumulation and the budget decision: it runs `decide` over
+every fixture (the cursor, the appended span, the budget boundary, the persisted detail, a second
+compaction fed the first one's artifact) and asserts that the estimator is conservative on the
+`cjk` and `code-heavy` fixtures.
+
 ## Adding a fixture
 
 1. Add `fixtures/<name>.json` and list it in `fixtures/manifest.json`.

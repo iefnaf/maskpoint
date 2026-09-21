@@ -39,6 +39,13 @@ export type ItemKind = Item['kind']
 /** An observation: the item masking replaces the body of. */
 export type ToolResultItem = Extract<Item, { kind: 'tool-result' }>
 
+/** Paths the session has read, written and edited: derived state, so it holds paths and never content. */
+export interface FileOps {
+  read: string[]
+  written: string[]
+  edited: string[]
+}
+
 export interface ConversationSnapshot {
   items: Item[]
   /**
@@ -46,9 +53,20 @@ export interface ConversationSnapshot {
    * host retains verbatim; everything before it is the span the engine may mask.
    */
   boundary: { id: string }
+  /**
+   * The text of the previous compaction's result, whichever strategy produced it: what the host
+   * carried forward. It is appended to, never re-masked. Comes with `evictedThrough` or not at all.
+   */
   previousCheckpoint?: string
-  /** Id of the last item already represented in accumulated state. */
+  /**
+   * Id of the last item already represented in `previousCheckpoint`. Taken from the host's own
+   * repeated-compaction boundary where it has one, else from the previous `EngineDetail.cursor`.
+   */
   evictedThrough?: string
+  /** What the previous compaction persisted, when the adapter found compatible details. */
+  previousDetail?: EngineDetail
+  /** File operations the host tracked for the span being compacted now, when it tracks them. */
+  fileOps?: FileOps
   customInstructions?: string
   reason: 'manual' | 'threshold' | 'overflow'
 }
@@ -61,6 +79,15 @@ export interface CapabilityProfile {
   persistMetadata: boolean
   honestCancellation: boolean
   injectionCapChars?: number
+}
+
+/**
+ * When accumulated history is too big to carry as masked history. The unit is tokens, by the
+ * engine's own estimator, never turns: the paper's turn counts were calibrated for another scaffold.
+ */
+export interface BudgetPolicy {
+  /** The candidate at or below this many estimated tokens stays masked history; above it, a checkpoint. */
+  checkpointTriggerTokens: number
 }
 
 /** The statistics key set, identical on every platform. */
@@ -77,7 +104,7 @@ export interface EngineDetail {
   strategy: 'mask' | 'checkpoint'
   checkpoints: number
   stats: Stats
-  files?: { read: string[]; written: string[]; edited: string[] }
+  files?: FileOps
   cursor?: { boundaryId: string; evictedThroughId: string }
 }
 
@@ -105,12 +132,16 @@ export type DeclineReason =
   | 'unreadable-snapshot'
   | 'masking-failure'
   | 'inconsistent-cursor'
+  /** No previous state and nothing evicted: any artifact would be empty, and an empty artifact is never returned. */
+  | 'nothing-to-compact'
   | 'host-rejected'
 
 export type Outcome =
   | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats }
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
+
+export type MaskedHistoryOutcome = Extract<Outcome, { kind: 'masked-history' }>
 
 /**
  * Turns an artifact into a host's vocabulary: a Pi summary string, DSH content blocks, injected

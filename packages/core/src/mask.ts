@@ -89,12 +89,10 @@ export function maskItems(items: readonly Item[]): { items: Item[]; stats: MaskS
 }
 
 /**
- * Mask the span the host is compacting: every item before the retained boundary. The host's
- * retained region is the only full-fidelity window, so nothing at or after the boundary is
- * touched — and none of it appears in the result, so it can never be duplicated into the compacted
- * side. Throws `MaskingError` when the boundary or the ids cannot be trusted.
+ * Index of the retained boundary: the first item the host keeps, so the compacted span is
+ * `items.slice(0, index)`. Throws `MaskingError` when the ids or the boundary cannot be trusted.
  */
-export function maskSpan(items: readonly Item[], boundary: { id: string }): { items: Item[]; stats: MaskStats } {
+export function locateBoundary(items: readonly Item[], boundary: { id: string }): number {
   const seen = new Set<string>()
   for (const item of items) {
     if (seen.has(item.id)) throw new MaskingError(`duplicate item id "${item.id}"`)
@@ -102,5 +100,15 @@ export function maskSpan(items: readonly Item[], boundary: { id: string }): { it
   }
   const cut = items.findIndex((item) => item.id === boundary.id)
   if (cut === -1) throw new MaskingError(`retained boundary names no item: "${boundary.id}"`)
-  return maskItems(items.slice(0, cut))
+  return cut
+}
+
+/**
+ * Mask the span the host is compacting: every item before the retained boundary. The host's
+ * retained region is the only full-fidelity window, so nothing at or after the boundary is
+ * touched — and none of it appears in the result, so it can never be duplicated into the compacted
+ * side. Throws `MaskingError` when the boundary or the ids cannot be trusted.
+ */
+export function maskSpan(items: readonly Item[], boundary: { id: string }): { items: Item[]; stats: MaskStats } {
+  return maskItems(items.slice(0, locateBoundary(items, boundary)))
 }

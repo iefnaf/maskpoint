@@ -14,6 +14,14 @@ const snapshot = (items: Item[], boundaryId: string): ConversationSnapshot => ({
   reason: 'threshold',
 })
 
+const detail = {
+  v: 1,
+  engine: 'maskpoint',
+  strategy: 'mask',
+  checkpoints: 0,
+  stats: { observationsMasked: 1, charsOmitted: 10, candidateTokens: 5 },
+}
+
 describe('parseSnapshot', () => {
   it('accepts a well-formed snapshot and returns it unchanged', () => {
     const value = snapshot([user('a'), { id: 'b', kind: 'assistant-text', text: 'hi' }], 'b')
@@ -42,8 +50,40 @@ describe('parseSnapshot', () => {
       { ...snapshot([user('a')], 'a'), evictedThrough: 'zzz' },
       /evictedThrough/,
     ],
+    ['file operations with a missing list', { ...snapshot([user('a')], 'a'), fileOps: { read: [], written: [] } }, /fileOps.*edited/],
+    [
+      'file operations that are not paths',
+      { ...snapshot([user('a')], 'a'), fileOps: { read: [1], written: [], edited: [] } },
+      /fileOps\.read/,
+    ],
+    [
+      'previous details of an unknown version',
+      { ...snapshot([user('a')], 'a'), previousDetail: { ...detail, v: 2 } },
+      /previousDetail\.v/,
+    ],
+    [
+      'previous details with an unknown key',
+      { ...snapshot([user('a')], 'a'), previousDetail: { ...detail, body: 'leak' } },
+      /previousDetail.*unknown key "body"/,
+    ],
+    [
+      'previous details without statistics',
+      { ...snapshot([user('a')], 'a'), previousDetail: { ...detail, stats: { observationsMasked: 1 } } },
+      /previousDetail\.stats/,
+    ],
   ])('rejects %s', (_label, value, message) => {
     expect(() => parseSnapshot(value)).toThrow(message)
+  })
+
+  it('accepts the accumulation state an adapter supplies: previous details and file operations', () => {
+    const value = {
+      ...snapshot([user('a'), user('b')], 'b'),
+      previousCheckpoint: 'state',
+      evictedThrough: 'a',
+      previousDetail: { ...detail, files: { read: ['/workspace/a.ts'], written: [], edited: [] }, cursor: { boundaryId: 'a', evictedThroughId: 'a' } },
+      fileOps: { read: ['/workspace/b.ts'], written: [], edited: ['/workspace/c.ts'] },
+    }
+    expect(parseSnapshot(value)).toEqual(value)
   })
 })
 

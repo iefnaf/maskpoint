@@ -130,8 +130,10 @@ type Item = { id: string } & (      // id: unique within a snapshot; names posit
 interface ConversationSnapshot {
   items: Item[]
   boundary: { id: string }          // host cut point: the first item the host retains; opaque to the engine
-  previousCheckpoint?: string
-  evictedThrough?: string           // id of the last item already represented in state
+  previousCheckpoint?: string       // text of the previous compaction's result, whichever strategy made it
+  evictedThrough?: string           // id of the last item already represented in previousCheckpoint; the two come together or not at all
+  previousDetail?: EngineDetail     // what the previous compaction persisted; carries the checkpoint count and file lists forward
+  fileOps?: FileOps                 // file operations the host tracked for the span compacted now; merged into the earlier lists
   customInstructions?: string
   reason: 'manual' | 'threshold' | 'overflow'
 }
@@ -151,7 +153,7 @@ interface EngineDetail {            // persisted; never contains observation bod
   strategy: 'mask' | 'checkpoint'
   checkpoints: number
   stats: { observationsMasked: number; charsOmitted: number; candidateTokens: number }
-  files?: { read: string[]; written: string[]; edited: string[] }
+  files?: FileOps                   // { read, written, edited: string[] } — paths only
   cursor?: { boundaryId: string; evictedThroughId: string }
 }
 
@@ -189,6 +191,11 @@ type AdapterEffect =
 
 ```ts
 function run(input: ConversationSnapshot, budget: BudgetPolicy, deps: EngineDeps): Promise<Outcome>
+function decide(input: ConversationSnapshot, budget: BudgetPolicy): Decision
+// The decision layer under run(): synchronous and model-free, so the masked-history path cannot make a
+// model call. Decision = Outcome | { kind: 'checkpoint-requested'; reason: 'over-budget' | 'custom-instructions';
+// fallback: MaskedHistoryOutcome }. The fallback is what to return if the checkpoint call is rejected, and its
+// artifact is the checkpoint's input. BudgetPolicy = { checkpointTriggerTokens: number }.
 function estimateTokens(text: string): number
 function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; stats: MaskStats }
 // MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>: candidateTokens belongs to accumulation.
@@ -216,11 +223,15 @@ function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
 
 - Candidate = previous checkpoint (if any) followed by only the newly evicted masked history.
 - "Newly evicted" is derived from the host's repeated-compaction boundary where one exists. Where a host exposes none, the adapter persists a cursor in `EngineDetail.cursor` and refuses to append when the cursor is missing or inconsistent — it declines instead of risking double-appending the same span.
-- File-operation summaries supplied by the adapter are merged, not replaced, so a host that tracks read/written/edited files keeps that context across Maskpoint compactions.
+- The cursor and the state it describes come together or not at all: state without `evictedThrough` could be appended to twice, and `evictedThrough` (or `previousDetail`) without state would drop the span it claims is kept. All decline (`inconsistent-cursor`), as does a cursor that names no item or reaches into the retained region. Empty previous state counts as no state. A cursor at the last item before the boundary is valid and appends nothing. With no previous state and nothing evicted there is nothing to return, and an empty artifact is never returned (`nothing-to-compact`).
+- The previous state is carried forward verbatim and never re-masked, so a full observation cannot accumulate: every observation entered the state once, as a placeholder. **Naming caveat:** the carried state travels as `previousCheckpoint` and as an artifact section of kind `checkpoint` even when the compaction that produced it was mask-only, so it is then masked history, not a model-written checkpoint. The names predate this rule and are kept so the vocabulary does not churn; `EngineDetail.strategy` and `checkpoints` are the record of what actually ran. Renaming the field and section is a candidate cleanup once an adapter has to distinguish them. The result records a new cursor (`boundaryId` and the id of the last evicted item) for the adapter to feed back as `evictedThrough`.
+- File-operation summaries supplied by the adapter are merged, not replaced, so a host that tracks read/written/edited files keeps that context across Maskpoint compactions. The earlier lists come from `previousDetail.files`, the host's newer operations from `fileOps`; the result is their order-preserving, de-duplicated union, and is absent when neither side has any.
+- `EngineDetail.stats` describes this compaction: observations masked and characters omitted in the newly evicted span, and the candidate's estimated size. `checkpoints` is carried forward from `previousDetail` on the masked path.
 
 ### Budget
 
 - The decision is one comparison: estimated size of the whole candidate against `checkpointTriggerTokens`. At or below budget the candidate is returned as masked history with zero model calls. Above budget — or whenever custom instructions are present — exactly one checkpoint call is made.
+- The candidate is measured as one text: previous state, then the history framing and each newly evicted item under its role label and payload. The budget therefore counts the labels and framing an adapter's rendering adds, not just payloads. The comparison is written "within budget or not", so a budget or estimate that cannot be compared (NaN) takes the checkpoint path, never the masked one. Blank custom instructions are not instructions.
 - The unit is tokens, not turns, because the paper's turn-count parameters were calibrated for a different scaffold and do not transfer. The paper's turn window maps onto the host's retained region; its summary interval maps onto this budget.
 - The estimator is deliberately conservative, weighting CJK text above its character count, so that non-English sessions cannot silently exceed the budget. Calibration against host-provided meters is an open issue.
 - The initial default is 12,000 tokens and is a tuning parameter, not a derived constant.
