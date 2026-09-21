@@ -158,7 +158,8 @@ interface EngineDetail {            // persisted; never contains observation bod
 }
 
 type Outcome =
-  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats }
+  | { kind: 'masked-history'; artifact: Artifact; detail: EngineDetail; stats: Stats
+      checkpointRejection?: 'provider-error' | 'aborted' | 'truncated' | 'empty' | 'tool-call' }  // set when a checkpoint was tried and rejected
   | { kind: 'checkpoint'; artifact: Artifact; detail: EngineDetail; stats: Stats; usage?: Usage }
   | { kind: 'decline'; reason: DeclineReason }
 ```
@@ -204,6 +205,18 @@ function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; sta
 function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
 // maskSpan without the boundary: masks a span the caller has already cut, e.g. the newly evicted
 // items once accumulation has dropped what earlier state already represents.
+
+interface EngineDeps {
+  complete(request: ModelRequest): Promise<ModelResponse>   // injected by the adapter; the core itself does no I/O
+  newRoutingId(): string                                    // fresh identity, asked for once per checkpoint call
+  signal: CancellationSignal                                // the host's signal, carried into the request
+  checkpoint: { maxOutputTokens: number; model?: string }   // model absent = the session model
+}
+// ModelRequest = { model?, instructions, input, maxOutputTokens, routingId, cacheRetention: 'none',
+//                  tools: [], signal }. ModelResponse.stopReason = 'stop' | 'length' | 'tool-call' | 'error' | 'aborted'.
+// `run` is `decide` plus the one call: the masked-history path never touches `deps`. A rejected
+// checkpoint returns the masked-history outcome with `checkpointRejection` set to why, so an adapter
+// can log and count it; an accepted one returns `kind: 'checkpoint'` with the model's usage.
 ```
 
 ## Algorithms
@@ -250,6 +263,14 @@ function maskItems(items: Item[]): { items: Item[]; stats: MaskStats }
 
 Pi's pre-compaction event fires for manual, threshold, and overflow compaction, and a returned custom result replaces the default summarize step. The adapter returns the host's prepared cut point unchanged, renders the artifact as the host's summary text, and stores `EngineDetail` in the compaction entry's details. Because Pi does not fold hook-produced details into later file tracking, the adapter merges the latest compatible details from the active branch with the current preparation's file operations. Custom instructions force a checkpoint. Foreign or older details are treated as absent. Branch/tree summarization is a separate Pi mechanism and is not covered.
 
+**Zero-LLM path (issue #6).** The adapter normalizes the branch's session entries, not `preparation`'s messages, because only entries carry ids: an entry yields one item or several (an assistant turn is its reasoning, text and each tool call), with ids `<entry id>#<n>`. The retained boundary is the first item at or after `preparation.firstKeptEntryId`, and the returned cut point is that id, untouched. On a repeated compaction the previous compaction's summary is the carried state and its `firstKeptEntryId` is the cursor: that is where Pi itself restarts the span (or just after the compaction when that entry is gone), so it works the same whether Pi or Maskpoint wrote the earlier summary. The adapter reconciles its reading with Pi's before trusting it: Pi's `previousSummary` must be the one on the branch, and the number of conversation entries it normalized between the two cut points must equal the messages Pi prepared, so a Pi that changes what it counts as conversation declines instead of silently dropping history. Entries the adapter does not know are ignored, and a message shape it cannot represent declines only when it lies in the span being compacted, since Pi's retained region is never rendered.
+
+The result must **strictly shrink** context: the rendered summary is compared with the previous summary plus the newly evicted history as Pi held it (an image counted at Pi's own 1,200-token estimate, which the text estimator cannot see), and a result that is not smaller declines. Framing and role labels cost tokens, so a span with little to mask can render larger than it was.
+
+This first version does not yet read the earlier compaction's `EngineDetail` or Pi's file operations, so the "merge the latest compatible details" step above and the cumulative read/written/edited lists are issue #7's. Until then the carried summary is all that survives from an earlier compaction, and Pi's own file tracking does not see paths once Maskpoint has compacted (they remain in the masked history as tool-call arguments).
+
+Until the checkpoint path lands (issue #7) the adapter makes no model call at all. Over budget it returns the masked history, which the design already names as the fallback for a checkpoint that cannot run. Custom instructions are different: a focus the user asked for cannot be applied without a model, so it declines (`checkpoint-unavailable`) and Pi's compactor honours it, which is what the user would get with Maskpoint uninstalled. The masked history is rendered to exactly the text the budget measured, so `candidateTokens` in the persisted details is the size of what Pi was given.
+
 ### DSH
 
 The adapter implements the host's abstract compaction service and ships as an external package, installed as a host bundle that disables the built-in backend and inserts ours (Open issue 1). The host allows one backend per context, so it replaces the built-in rather than sitting beside it. All three entry points are honoured: automatic trigger, explicit idle-session compaction, and explicit region compaction, with the seam's pairing predicates validating region edges.
@@ -286,6 +307,9 @@ Strictly assisted: pre-compaction and post-compaction hooks exist, but the host 
 | Budget | Estimation overflow | Checkpoint path |
 | Checkpoint | Provider error, abort, length stop, empty text, tool call | Masked history |
 | Checkpoint | Model missing or unauthenticated | Masked history |
+| Native result | Not smaller than what it replaces (`no-size-reduction`) | Decline → host compacts |
+| Native result | Custom instructions and no checkpoint path (`checkpoint-unavailable`) | Decline → host compacts |
+| Any stage | Unexpected fault (`engine-failure`) | Decline → host compacts |
 | Native apply | Host rejects the result | Decline → host compacts |
 | Persistence | Metadata write fails | Emit the result; log; do not lose the compaction |
 | Assisted inject | Over the injection cap | Inject a pointer to persisted state |
