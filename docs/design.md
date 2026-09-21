@@ -115,7 +115,7 @@ flowchart LR
 ### Normalized conversation
 
 ```ts
-type Item =
+type Item = { id: string } & (      // id: unique within a snapshot; names positions
   | { kind: 'user'; text: string }
   | { kind: 'assistant-text'; text: string }
   | { kind: 'assistant-reasoning'; text: string }
@@ -125,12 +125,13 @@ type Item =
   | { kind: 'checkpoint'; text: string }
   | { kind: 'host-context'; label: string; text: string }
   | { kind: 'opaque'; note: string }
+)
 
 interface ConversationSnapshot {
   items: Item[]
-  boundary: { id: string }          // host cut point; opaque to the engine
+  boundary: { id: string }          // host cut point: the first item the host retains; opaque to the engine
   previousCheckpoint?: string
-  evictedThrough?: string           // last item already represented in state
+  evictedThrough?: string           // id of the last item already represented in state
   customInstructions?: string
   reason: 'manual' | 'threshold' | 'overflow'
 }

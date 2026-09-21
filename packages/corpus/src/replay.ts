@@ -1,9 +1,12 @@
 import type { Artifact, Item, Renderer, Stats } from '@maskpoint/core'
 import type { CorpusFixture } from './corpus.js'
+import { boundaryIndex, payload } from './items.js'
 
 /** What the harness needs from a masking engine: the newly evicted span in, masked items and stats out. */
 export interface ReplayEngine {
   name: string
+  /** Set to false for an engine that returns history unmasked, so the replay can say so. */
+  masks?: false
   mask(evicted: Item[]): { items: Item[]; stats: Pick<Stats, 'observationsMasked' | 'charsOmitted'> }
 }
 
@@ -13,20 +16,8 @@ export interface ReplayEngine {
  */
 export const passThroughEngine: ReplayEngine = {
   name: 'pass-through (masking not implemented yet)',
+  masks: false,
   mask: (evicted) => ({ items: evicted, stats: { observationsMasked: 0, charsOmitted: 0 } }),
-}
-
-function payload(item: Item): string {
-  switch (item.kind) {
-    case 'tool-call':
-      return item.args
-    case 'tool-result':
-      return item.text ?? ''
-    case 'opaque':
-      return item.note
-    default:
-      return item.text
-  }
 }
 
 function label(item: Item): string {
@@ -92,12 +83,12 @@ const sizeOf = (items: Item[]) => items.reduce((total, item) => total + payload(
 export function replay(fixture: CorpusFixture, engine: ReplayEngine): string {
   const { snapshot } = fixture
   const { items } = snapshot
-  const boundaryIndex = items.findIndex((item) => item.id === snapshot.boundary.id)
+  const cut = boundaryIndex(snapshot)
   const representedThrough =
     snapshot.evictedThrough === undefined ? 0 : items.findIndex((item) => item.id === snapshot.evictedThrough) + 1
 
-  const evicted = items.slice(representedThrough, boundaryIndex)
-  const retained = items.slice(boundaryIndex)
+  const evicted = items.slice(representedThrough, cut)
+  const retained = items.slice(cut)
   const masked = engine.mask(evicted)
 
   const artifact: Artifact = {
@@ -116,6 +107,7 @@ export function replay(fixture: CorpusFixture, engine: ReplayEngine): string {
     `trigger: ${snapshot.reason} · items: ${items.length} · already represented: ${representedThrough} · compacted: ${evicted.length} · retained: ${retained.length} (boundary ${snapshot.boundary.id})`,
     `engine: ${engine.name}`,
     ...(snapshot.customInstructions === undefined ? [] : [`custom instructions: ${snapshot.customInstructions}`]),
+    ...(engine.masks === false ? ['note: this engine does not mask, so the history below is unmasked'] : []),
     '',
     plainTextRenderer.render(artifact),
     '',

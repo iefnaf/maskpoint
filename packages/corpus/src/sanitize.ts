@@ -29,13 +29,21 @@ const RULES: Rule[] = [
   { name: 'private-key', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { name: 'bearer-token', pattern: /\bBearer\s+[A-Za-z0-9._~+/-]{20,}/ },
   {
-    // NAME=value or "name": "value" where the value is long, unplaceholdered, and mixes letters and digits.
+    // A secret-named key given a long, unplaceholdered value. Bare `key: value` and spaced `key = value`
+    // are prose or code, so they need letters and digits; a quoted value or compact `key=value` is
+    // JSON, env, or CLI style, and is flagged whatever it contains.
     name: 'secret-assignment',
     pattern: new RegExp(
-      String.raw`${SECRET_KEY_NAME}(?:\\?["'])?\s*[=:]\s*(?:\\?["'])?([^\s"'\\$<{*\[][^\s"'\\]{7,})`,
+      String.raw`${SECRET_KEY_NAME}(?:\\?["'])?(\s*[=:]\s*)((?:\\?["'])?)([^\s"'\\$<{*\[][^\s"'\\]{7,})`,
       'i',
     ),
-    accept: (match) => /[A-Za-z]/.test(match[1]!) && /\d/.test(match[1]!),
+    accept: ([, separator, quote, value]) =>
+      quote !== '' || separator === '=' || (/[A-Za-z]/.test(value!) && /\d/.test(value!)),
+  },
+  {
+    name: 'url-credentials',
+    pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:([^\s/@]{3,})@/i,
+    accept: (match) => !/^[<$*{]/.test(match[1]!),
   },
   {
     name: 'real-path',

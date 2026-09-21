@@ -35,16 +35,16 @@ function requireString(rec: Rec, key: string, path: string): string {
   return value
 }
 
-function optionalString(rec: Rec, key: string, path: string): void {
+function checkOptionalString(rec: Rec, key: string, path: string): void {
   if (rec[key] !== undefined) requireString(rec, key, path)
 }
 
-function optionalInteger(rec: Rec, key: string, path: string): void {
+function checkOptionalInteger(rec: Rec, key: string, path: string): void {
   const value = rec[key]
   if (value !== undefined && !Number.isInteger(value)) fail(`${path}.${key}`, 'expected an integer')
 }
 
-function parseItem(value: unknown, path: string): void {
+function validateItem(value: unknown, path: string): void {
   if (!isRecord(value)) return fail(path, 'expected an item object')
   const id = requireString(value, 'id', path)
   if (id === '') fail(`${path}.id`, 'must not be empty')
@@ -61,7 +61,7 @@ function parseItem(value: unknown, path: string): void {
       checkKeys(value, path, ['id', 'kind', 'name', 'callId', 'args'])
       requireString(value, 'name', path)
       requireString(value, 'args', path)
-      optionalString(value, 'callId', path)
+      checkOptionalString(value, 'callId', path)
       return
     case 'tool-result': {
       checkKeys(value, path, ['id', 'kind', 'name', 'callId', 'status', 'exitCode', 'text', 'media', 'masked'])
@@ -69,10 +69,10 @@ function parseItem(value: unknown, path: string): void {
       if (!Number.isInteger(value.media) || (value.media as number) < 0) {
         fail(`${path}.media`, 'expected a non-negative integer media count')
       }
-      optionalString(value, 'name', path)
-      optionalString(value, 'callId', path)
-      optionalString(value, 'text', path)
-      optionalInteger(value, 'exitCode', path)
+      checkOptionalString(value, 'name', path)
+      checkOptionalString(value, 'callId', path)
+      checkOptionalString(value, 'text', path)
+      checkOptionalInteger(value, 'exitCode', path)
       if (value.masked !== undefined && typeof value.masked !== 'boolean') {
         fail(`${path}.masked`, 'expected a boolean')
       }
@@ -108,7 +108,7 @@ export function parseSnapshot(value: unknown): ConversationSnapshot {
   const ids = new Set<string>()
   value.items.forEach((item: unknown, index: number) => {
     const path = `snapshot.items[${index}]`
-    parseItem(item, path)
+    validateItem(item, path)
     const id = (item as Rec).id as string
     if (ids.has(id)) fail(`${path}.id`, `duplicate item id "${id}"`)
     ids.add(id)
@@ -122,8 +122,8 @@ export function parseSnapshot(value: unknown): ConversationSnapshot {
   if (value.reason !== 'manual' && value.reason !== 'threshold' && value.reason !== 'overflow') {
     fail('snapshot.reason', 'expected "manual", "threshold" or "overflow"')
   }
-  optionalString(value, 'previousCheckpoint', 'snapshot')
-  optionalString(value, 'customInstructions', 'snapshot')
+  checkOptionalString(value, 'previousCheckpoint', 'snapshot')
+  checkOptionalString(value, 'customInstructions', 'snapshot')
   if (value.evictedThrough !== undefined) {
     const evictedThrough = requireString(value, 'evictedThrough', 'snapshot')
     if (!ids.has(evictedThrough)) fail('snapshot.evictedThrough', `names no item: "${evictedThrough}"`)

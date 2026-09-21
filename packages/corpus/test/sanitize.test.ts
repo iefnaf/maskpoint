@@ -48,6 +48,26 @@ describe('scanText', () => {
   })
 
   it.each([
+    ['a quoted letters-only password', '{"password": "' + 'correcthorsebattery"}'],
+    ['a compact key=value secret without digits', 'curl --data password=' + 'correcthorsebattery'],
+    ['credentials embedded in a URL', 'postgres://admin:' + 's3cretpw@db.internal:5432/app'],
+  ])('flags %s', (_label, sample) => {
+    expect(scanText(sample).length).toBeGreaterThan(0)
+  })
+
+  it('does not mistake ordinary code or URLs for secrets', () => {
+    const benign = [
+      'const tokenizer = createTokenizer',
+      'tokens: Array<string> = []',
+      'const password: string = readPasswordFromPrompt()',
+      'postgres://localhost:5432/app',
+      'https://registry.example.test/dep-1/-/dep-1-2.1.0.tgz',
+      'the secret to good tests is small seams',
+    ].join('\n')
+    expect(scanText(benign)).toEqual([])
+  })
+
+  it.each([
     ['a macOS home directory', '/Users/' + 'alice/projects/app/src/main.ts'],
     ['a Linux home directory', 'cd /home/' + 'bob/work && ls'],
     ['a Windows home directory', 'C:\\Users\\' + 'carol\\repo'],

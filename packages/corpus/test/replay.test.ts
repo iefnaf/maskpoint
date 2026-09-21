@@ -93,6 +93,8 @@ describe('replay', () => {
   it('shows a pass-through engine honestly: nothing masked, and it says so', () => {
     const untouched = replay(fixture, passThroughEngine)
     expect(untouched).toContain('engine: pass-through')
+    expect(untouched).toMatch(/note: .*does not mask.*unmasked/i)
+    expect(replay(fixture, maskingDouble)).not.toMatch(/does not mask/i)
     expect(untouched).toContain('observationsMasked: 0')
     expect(untouched).toContain('charsOmitted: 0')
     expect(section(untouched, 'masked history')).toContain('BULKY-OBSERVATION-BODY')
