@@ -1,0 +1,19 @@
+# The Maskpoint bundle patch: swap DSH's built-in compaction backend for Maskpoint.
+#
+# The host allows one compaction backend per context, so ours cannot sit beside the built-in; it
+# replaces it. A patch's `name` is only a guard (it cannot retarget a row), so the swap is a
+# disable plus an insert. Any `config` you gave the `compaction-basic` row moves to the
+# `maskpoint` row unchanged: the backend reads the same settings.
+#
+# This reaches the host-plane row only. The shipped `standard`, `code`, and `cordis` agent presets
+# mount their own compaction backend inside a preset realm that a bundle patch does not touch; an
+# agent in one of those needs a preset copy with its `compaction-basic` row's `name` changed to
+# `@maskpoint/dsh`. See README.md.
+
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  disabled: true
+
+- insert:
+    - id: maskpoint
+      name: '@maskpoint/dsh'

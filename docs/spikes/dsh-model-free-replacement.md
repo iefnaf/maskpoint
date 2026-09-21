@@ -118,6 +118,17 @@ Stated above as fact but not exercised by the spike; each was read at the cited 
 - Whether the built-in pruner, present or absent, needs an ordering rule with A1. Both use the same protocol on the same nodes, so it should compose, but the spike did not run them together. Issue #10 owns it.
 - A `toolResultPruner` substitute as the way to host A1. `compaction-basic` calls `ctx.get('toolResultPruner')?.pruneSession` before range selection, so a Maskpoint masker registered under that service might be the whole automatic adapter. Untested lead for #10.
 
+## Follow-up from #10
+
+Recorded here so the list above is not read as still open; the evidence and decisions live in [`docs/design.md`](../design.md) Open issue 1 and the DSH adapter section.
+
+- **Against a published release.** The spike's commit (0.1.0-rc.5) was never published. #10 pins the published `0.1.0-rc.8` family, and this spike's 14 characterization tests pass on it with the same accounting figures.
+- **Preset realm:** settled as workable (a preset copy with one row's `name` swapped); resolution read from source, exercised through a real-Loader composition shaped like the shipped presets; the real launcher remains a manual smoke step.
+- **Pruner ordering:** no ordering rule is needed; present, absent, and already-run compositions are tested.
+- **`toolResultPruner` substitute:** not taken. Registering under that service would leave the built-in backend mounted, and its automatic path summarizes with a model. The backend replaces the built-in instead.
+- **Still not verified:** B with the checkpoint path (#11), and a real `dsh plugin add` boot.
+- **Deep import:** confirmed unusable. The published package ships no `src`, so its `./src/*` export resolves to nothing; the two types are restated in `packages/dsh/src/host-types.ts`, as are the host's trigger arithmetic and range selection, which the package root also does not export. Asking upstream to re-export them remains the better fix.
+
 ## Consequences for the design
 
 - **The DSH accumulation problem mostly disappears on the automatic path.** DSH's surface already is the accumulated state, and A1 masks it in place, so there is no candidate to assemble and no cursor to persist. The budget comparison becomes `measure()` against the trigger. This is a lead for #10 and #11, not a settled design change.
