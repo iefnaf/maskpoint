@@ -147,16 +147,21 @@ function fromMessage(entry: Rec, at: (n: number) => string): Item[] {
 }
 
 /**
- * The engine items for one session entry. An entry can hold several (an assistant turn is its
- * reasoning, its text and each of its tool calls), so ids are `<entry id>#<n>`: unique within a
- * snapshot, and each still names a position in the host's own entry order.
+ * The id of an entry's `n`th item: `<entry id>#<n>`. An entry can hold several items (an assistant
+ * turn is its reasoning, its text and each of its tool calls), so ids stay unique within a snapshot
+ * while each still names a position in the host's own entry order.
+ */
+export const itemId = (entryId: string, n: number): string => `${entryId}#${n}`
+
+/**
+ * The engine items for one session entry.
  *
  * Entries that carry no conversation, or whose type this adapter does not know, yield nothing.
  * An unknown type that Pi does turn into a message is caught by the message count check.
  * Throws `UnrecognizedShape` for a conversation entry this adapter cannot represent.
  */
 export function normalizeEntry(entry: Rec & { id: string }): Item[] {
-  const at = (n: number) => `${entry.id}#${n}`
+  const at = (n: number) => itemId(entry.id, n)
   switch (entry.type) {
     case 'message':
       return fromMessage(entry, at)

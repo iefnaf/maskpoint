@@ -254,6 +254,8 @@ Pi's pre-compaction event fires for manual, threshold, and overflow compaction, 
 
 The result must **strictly shrink** context: the rendered summary is compared with the previous summary plus the newly evicted history as Pi held it (an image counted at Pi's own 1,200-token estimate, which the text estimator cannot see), and a result that is not smaller declines. Framing and role labels cost tokens, so a span with little to mask can render larger than it was.
 
+This first version does not yet read the earlier compaction's `EngineDetail` or Pi's file operations, so the "merge the latest compatible details" step above and the cumulative read/written/edited lists are issue #7's. Until then the carried summary is all that survives from an earlier compaction, and Pi's own file tracking does not see paths once Maskpoint has compacted (they remain in the masked history as tool-call arguments).
+
 Until the checkpoint path lands (issue #7) the adapter makes no model call at all. Over budget it returns the masked history, which the design already names as the fallback for a checkpoint that cannot run. Custom instructions are different: a focus the user asked for cannot be applied without a model, so it declines (`checkpoint-unavailable`) and Pi's compactor honours it, which is what the user would get with Maskpoint uninstalled. The masked history is rendered to exactly the text the budget measured, so `candidateTokens` in the persisted details is the size of what Pi was given.
 
 ### DSH

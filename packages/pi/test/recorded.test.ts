@@ -118,6 +118,30 @@ describe('a real repeated compaction', () => {
   })
 })
 
+describe('a real compaction on top of a summary Pi itself wrote', () => {
+  const afterPi = load('after-pi-summary.json')
+  const previous = entriesOf(afterPi).findLast((entry) => entry.type === 'compaction')!
+
+  it("is the case it claims: Pi's own LLM summary, in Pi's own details shape", () => {
+    expect(previous.fromHook).toBeFalsy()
+    expect(previous.details).toHaveProperty('readFiles')
+    expect(previous.details).not.toHaveProperty('engine')
+    expect(afterPi.preparation.previousSummary).toBe(previous.summary)
+  })
+
+  it("carries Pi's summary forward verbatim and adds only what was evicted since", () => {
+    const effect = native(planCompaction(afterPi))
+    expect(effect.summary.startsWith(previous.summary)).toBe(true)
+    expect(effect.summary.length).toBeGreaterThan(previous.summary.length)
+    expect(effect.boundary).toEqual({ id: afterPi.preparation.firstKeptEntryId })
+    const entries = entriesOf(afterPi)
+    const since = observationBodies({ ...afterPi, branchEntries: entries.slice(entries.indexOf(previous) + 1) })
+    expect(identifying(since).length).toBeGreaterThan(0)
+    for (const body of identifying(since)) expect(effect.summary).not.toContain(body.slice(0, 80))
+    expect(effect.detail.stats.observationsMasked).toBeGreaterThan(0)
+  })
+})
+
 describe('a real threshold compaction', () => {
   it('is what Pi sends for automatic compaction: the reason and no retry', () => {
     expect(automatic.reason).toBe('threshold')

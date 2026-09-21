@@ -12,6 +12,7 @@ how a change in Pi's shapes shows up as a red test rather than a silent no-op in
 |---|---|---|
 | `manual-first.json` | `/compact` | A first compaction: four turns of reads and a `bash` call. |
 | `manual-repeat.json` | `/compact` | The second compaction of that session. Its `previousSummary` is the summary this adapter wrote for the first, and the compaction entry on its branch carries the `EngineDetail` this adapter persisted. |
+| `after-pi-summary.json` | `/compact` | A compaction on top of a summary **Pi's own compactor wrote** (recorded by running the session once with no extension, then continuing it with this one), so the previous compaction entry is Pi's, with an LLM summary and Pi's own `details`. |
 | `threshold-first.json` | automatic threshold | Pi's own threshold trigger, mid-session, on a session whose compaction threshold was lowered. |
 
 The overflow trigger is not recorded: it needs the provider to reject a request for size. It is the

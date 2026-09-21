@@ -1,6 +1,6 @@
 import type { ConversationSnapshot, DeclineReason, Item } from '@maskpoint/core'
 import type { PiBeforeCompactEvent } from './host.js'
-import { isRecord, normalizeEntry, type Rec, UnrecognizedShape, yieldsMessage } from './normalize.js'
+import { isRecord, itemId, normalizeEntry, type Rec, UnrecognizedShape, yieldsMessage } from './normalize.js'
 
 /** Why no snapshot could be built. `note` says what was wrong with the structure, never what it contained. */
 export interface SnapshotDecline {
@@ -54,6 +54,8 @@ export function buildSnapshot(event: PiBeforeCompactEvent): ConversationSnapshot
     }
     const keptThen = entries.findIndex((entry) => entry.id === earlier.firstKeptEntryId)
     represented = keptThen >= 0 ? keptThen : previous + 1
+    // The core calls carried state a "checkpoint" whichever strategy wrote it (docs/design.md,
+    // "Accumulation"). Here it is masked history when Maskpoint wrote it and Pi's own summary when not.
     previousCheckpoint = earlier.summary
   } else if (preparation.previousSummary !== undefined) {
     return unreadable('Pi reports a previous summary but the branch has no compaction')
@@ -77,7 +79,7 @@ export function buildSnapshot(event: PiBeforeCompactEvent): ConversationSnapshot
     } catch (error) {
       if (!(error instanceof UnrecognizedShape)) throw error
       if (index >= represented && index < kept) return unreadable(`entry ${index} (${entry.type}): ${error.message}`)
-      produced = [{ id: `${entry.id}#0`, kind: 'opaque', note: `unrecognized ${entry.type} entry` }]
+      produced = [{ id: itemId(entry.id, 0), kind: 'opaque', note: `unrecognized ${entry.type} entry` }]
     }
     for (const item of produced) {
       items.push(item)

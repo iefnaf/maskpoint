@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
 import { firstTurn } from './support/scenario.js'
-import { beforeCompact, fakeContext } from './support/session.js'
+import { assistant, beforeCompact, bulky, fakeContext, text, toolCall, toolResult, user } from './support/session.js'
 
 type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>
 
@@ -81,6 +81,28 @@ describe('what the user is told', () => {
     expect(ctx.notes[0]?.message).toMatch(/masked 1 observation/i)
     expect(ctx.notes[0]?.message).toMatch(/no model call/i)
     expect(ctx.notes[0]?.level).toBe('info')
+  })
+
+  it('says so when the history is over the checkpoint budget and no checkpoint ran', async () => {
+    const long = 'a long, careful explanation. '.repeat(2500)
+    const entries = [
+      user('u1', 'Explain everything.'),
+      assistant('a1', [text(long), toolCall('c1', 'read', { path: '/workspace/a.ts' })]),
+      toolResult('r1', 'c1', 'read', bulky('BODY-A')),
+      user('u2', 'Thanks.'),
+      assistant('a2', [text('Welcome.')]),
+    ]
+    const ctx = fakeContext()
+    const result = await handler()(beforeCompact(entries, 'u2'), ctx)
+    expect(result).toBeDefined()
+    expect(ctx.notes[0]?.message).toMatch(/over the checkpoint budget/i)
+    expect(ctx.notes[0]?.message).toMatch(/no checkpoint/i)
+  })
+
+  it('does not mention the budget when it was not exceeded', async () => {
+    const ctx = fakeContext()
+    await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(ctx.notes[0]?.message).not.toMatch(/budget/i)
   })
 
   it("says why it stepped aside, so a session running Pi's compactor is never a mystery", async () => {

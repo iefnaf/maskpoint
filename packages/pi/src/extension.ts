@@ -9,7 +9,9 @@ function announcement(effect: PiEffect): string {
   }
   const { observationsMasked, charsOmitted, candidateTokens } = effect.detail.stats
   const noun = observationsMasked === 1 ? 'observation' : 'observations'
-  return `Maskpoint masked ${observationsMasked} ${noun} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept, no model call.`
+  const masked = `Maskpoint masked ${observationsMasked} ${noun} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept, no model call.`
+  // The design would condense this into a checkpoint; say so rather than let it pass as within policy.
+  return effect.overBudget ? `${masked} Over the checkpoint budget, and no checkpoint runs in this version.` : masked
 }
 
 function report(ctx: PiContext, effect: PiEffect): void {

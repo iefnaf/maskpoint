@@ -29,7 +29,8 @@ export interface PiBeforeCompactEvent {
   customInstructions?: string | undefined
   reason: 'manual' | 'threshold' | 'overflow'
   willRetry: boolean
-  signal: AbortSignal
+  /** Aborted when the user cancels. Pi always supplies one; the handler does not rely on it. */
+  signal?: AbortSignal | undefined
 }
 
 /** What a handler returns to replace Pi's summarize step. Returning nothing leaves Pi's own compactor in charge. */

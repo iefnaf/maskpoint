@@ -38,6 +38,8 @@ export type PiEffect =
       boundary: { id: string }
       detail: EngineDetail
       tokensBefore: number
+      /** The candidate exceeded the budget: a checkpoint would have run, and none can here. */
+      overBudget: boolean
     }
   | { kind: 'decline'; reason: DeclineReason; note?: string }
 
@@ -52,7 +54,8 @@ const IMAGE_TOKENS = 1200
 
 /**
  * What the replaced span cost before: the earlier summary plus the newly evicted history as Pi
- * held it, bodies and images included.
+ * held it, bodies included, and the images tool results carried. An image the user attached is
+ * already a text note by now and is not counted, which only errs toward declining.
  */
 function tokensReplaced(snapshot: ConversationSnapshot): number {
   const { items, boundary, evictedThrough } = snapshot
@@ -92,6 +95,7 @@ function plan(event: PiBeforeCompactEvent, budget: BudgetPolicy): PiEffect {
     boundary: { id: event.preparation.firstKeptEntryId },
     detail: masked.detail,
     tokensBefore: event.preparation.tokensBefore,
+    overBudget: decision.kind === 'checkpoint-requested',
   }
 }
 

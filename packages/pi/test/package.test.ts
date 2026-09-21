@@ -50,10 +50,16 @@ describe('the Pi package', () => {
     }
   })
 
-  it('makes no network or model call of its own', () => {
+  it('reaches for no network or model registry of its own (extension.test.ts covers the behaviour)', () => {
     for (const file of sourceFiles()) {
       const code = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
-      expect(code, file).not.toMatch(/\b(fetch|XMLHttpRequest|WebSocket|modelRegistry|complete)\b/)
+      expect(code, file).not.toMatch(/\b(fetch|XMLHttpRequest|WebSocket|modelRegistry)\b/)
     }
+  })
+
+  it('depends on a core that ships its build, since Pi installs it from the registry', () => {
+    const core = JSON.parse(readFileSync(join(packageDir, '..', 'core', 'package.json'), 'utf8'))
+    expect(core.files).toContain('dist')
+    expect(core.scripts?.prepack).toMatch(/tsc/)
   })
 })

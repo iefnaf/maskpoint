@@ -1,6 +1,6 @@
 import { estimateTokens } from '@maskpoint/core'
 import { describe, expect, it } from 'vitest'
-import { planCompaction } from '../src/compact.js'
+import { capabilities, planCompaction } from '../src/compact.js'
 import { firstTurn, native } from './support/scenario.js'
 import { assistant, beforeCompact, bulky, text, user } from './support/session.js'
 
@@ -82,5 +82,22 @@ describe('planCompaction — over budget', () => {
     const effect = native(planCompaction(beforeCompact(firstTurn(), 'u2'), { checkpointTriggerTokens: 1 }))
     expect(effect.detail.strategy).toBe('mask')
     expect(effect.detail.checkpoints).toBe(0)
+  })
+
+  it('says it was over budget, so the caller can tell the user no checkpoint ran', () => {
+    expect(native(planCompaction(beforeCompact(firstTurn(), 'u2'), { checkpointTriggerTokens: 1 })).overBudget).toBe(true)
+    expect(native(planCompaction(beforeCompact(firstTurn(), 'u2'))).overBudget).toBe(false)
+  })
+})
+
+describe('capabilities', () => {
+  it('reports the native tier honestly: it replaces history and persists state, and has nothing to steer or re-inject', () => {
+    expect(capabilities).toEqual({
+      replaceHistory: true,
+      steerSummarizer: false,
+      reinjectContext: false,
+      persistMetadata: true,
+      honestCancellation: true,
+    })
   })
 })
