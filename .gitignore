@@ -1,0 +1,24 @@
+# Local scraping / research caches
+.firecrawl/
+.scratch/
+
+# Tool-local state
+.pi/
+.claude/
+.codex/
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Logs and coverage
+*.log
+npm-debug.log*
+coverage/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
