@@ -2,8 +2,10 @@
 
 Maskpoint as a compaction backend for [DSH](https://github.com/deepseek-ai/deepseek-harness). It
 replaces the host's built-in backend and masks observation bodies into placeholders instead of
-asking a model to summarize them. Tier: **native replacement**. It makes no model call today; the
-budgeted checkpoint path is issue #11. Design: [`docs/design.md`](../../docs/design.md), DSH adapter.
+asking a model to summarize them. Tier: **native replacement**. Automatic compaction stays
+model-free; `/compact` and explicit region compaction fall back to one budgeted checkpoint call,
+through the host's own LLM seam, when masking alone is not enough. Design:
+[`docs/design.md`](../../docs/design.md), DSH adapter.
 
 Supported host: the published `0.1.0-rc.8` family (`@deepseek-ai/dsh-*`). DSH is at release
 candidate; every claim here needs re-verifying per host release, and the tests in this package are
@@ -13,13 +15,17 @@ how (see Drift guards).
 
 | Entry | What happens |
 |---|---|
-| Automatic (pressure, overflow) | Uses the host's own trigger (threshold and retained window from the same config). Masks observations outside the retained window **in place**, per observation, by the host's prune protocol: a `compaction/prune` shadow price then a content-only `tool/result` replacement. Returns `null` (no summary ran). |
-| `/compact` (idle) and explicit region | The host's compaction transaction, with masked history as the summary under a `maskpoint` / `mask-only` envelope and no summarization-call marker. |
+| Automatic (pressure, overflow) | Uses the host's own trigger (threshold and retained window from the same config). Masks observations outside the retained window **in place**, per observation, by the host's prune protocol: a `compaction/prune` shadow price then a content-only `tool/result` replacement. Returns `null` (no summary ran). Model-free, always — the prune protocol has no way to carry a model-authored checkpoint. |
+| `/compact` (idle) and explicit region | The host's compaction transaction. Masks, then returns masked history as the summary under a `maskpoint` / `mask-only` envelope with no summarization-call marker — unless the candidate is over budget, in which case one checkpoint call condenses it through the host's LLM seam and is recorded with a real envelope (provider, model, generation cap) and usage. A rejected call (provider error, abort, output truncated, tool call, empty text) falls back to the masked-history landing; a checkpoint is never left empty or partial. |
 
 The host's token accounting stays exact under both: the meter total, the priced surface and both
 replay projections agree, and the total falls by exactly the priced delta. Tool-call/result pairing
 is preserved, region edges are validated with the host's pairing predicates, and expected failures
 use the host's manual-compaction error codes.
+
+The checkpoint call uses the session's own routed model by default, or a configured summarization
+provider/model when set; a fresh routing identity per call (never the session id); the host's own
+cancellation signal; and no agent tools.
 
 ## Install
 
@@ -67,10 +73,13 @@ masking, where the built-in ran it before compacting.
 
 ## Known limits
 
-- Masking only until #11: an over-budget candidate is still returned as masked history, and if
-  masking leaves the surface above the trigger it says so in the log and stops.
+- Automatic (pressure/overflow) compaction is masking-only, permanently: the prune protocol it lands
+  through cannot express a model-authored checkpoint. If masking alone leaves the surface above the
+  trigger, it says so in the log; an idle `/compact` or explicit region compaction is what brings a
+  stuck session back down.
 - Statistics are logged for every compaction, not persisted (`capabilities.persistMetadata` is
-  `false`).
+  `false`); the checkpoint's provider, model, generation cap and usage are durable on the host's own
+  `compaction/summary` event, independent of that flag.
 - An explicit compaction with nothing worth masking fails with the host's `summary` error.
 - The host's trigger arithmetic, range selection and two summarizer types are restated because the
   published package does not export them.
@@ -89,5 +98,10 @@ each entry lands are asserted, so a host release that changes the protocol fails
 1. `dsh plugin add @maskpoint/dsh`, then start a session on a preset copy as above.
 2. Fill context past the threshold, or lower `thresholdRatio` in the `maskpoint` row's config.
 3. Confirm the session log shows `compaction/prune` + `tool/result` pairs and no `compaction/summary`.
-4. Run `/compact` on an idle session; confirm a `compaction/summary` with provider `maskpoint`.
-5. Confirm the context meter fell and agrees with the transcript view.
+4. Run `/compact` on an idle session with modest history; confirm a `compaction/summary` with
+   provider `maskpoint`, model `mask-only`, no usage.
+5. Repeat `/compact` after enough turns that the accumulated masked history passes the 12,000-token
+   checkpoint budget (or force it via a large single observation); confirm a `compaction/summary`
+   with the session's own provider/model, `usage` present, and the checkpoint text — not a
+   placeholder list — as the session's new context.
+6. Confirm the context meter fell and agrees with the transcript view after each.

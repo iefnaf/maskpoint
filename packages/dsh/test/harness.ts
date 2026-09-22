@@ -6,6 +6,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LlmRuntime, {
   CallId,
@@ -14,7 +15,7 @@ import LlmRuntime, {
   createUserMessage,
   LlmAdapter,
 } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, LlmResolvedModelInfo, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -22,12 +23,24 @@ import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import * as CompactionInvariant from '@deepseek-ai/dsh-compaction/invariant'
+import MaskpointCompactionEngine from '../src/index.js'
 
 export const MODEL = 'test-model'
 
-/** A model route that only reports its context window: compaction never calls a model here. */
-class WindowAdapter extends LlmAdapter {
-  constructor(private readonly contextWindow: number) {
+/** What a scripted route answers with for one request: the chunks the host's assembler folds. */
+export type Reply = (options: GenerateOptions) => Iterable<StreamChunk> | Promise<Iterable<StreamChunk>>
+
+/**
+ * A model route that reports its context window and records every request it receives. With no
+ * `reply` it refuses to answer, which is how the masking tests prove that path never calls a model.
+ */
+class ScriptedAdapter extends LlmAdapter {
+  readonly calls: GenerateOptions[] = []
+
+  constructor(
+    private readonly contextWindow: number,
+    private readonly reply?: Reply,
+  ) {
     super()
   }
 
@@ -35,13 +48,56 @@ class WindowAdapter extends LlmAdapter {
     return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: this.contextWindow } })
   }
 
-  // eslint-disable-next-line require-yield
-  override async *stream(): AsyncIterable<StreamChunk> {
-    throw new Error('the masking path must never call a model')
+  override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    this.calls.push(options)
+    if (this.reply === undefined) throw new Error('the masking path must never call a model')
+    yield* await this.reply(options)
   }
 }
 
-export async function harness(contextWindow = 10_000): Promise<Context> {
+export const DEFAULT_USAGE: TokenUsage = { inputTokens: 900, outputTokens: 120, cacheReadTokens: 30 }
+
+/** The ways a summarization call can end, as the chunks a provider adapter would stream. */
+export const replies = {
+  text: (text: string, usage: TokenUsage = DEFAULT_USAGE): StreamChunk[] => [
+    { type: 'text-delta', index: 0, text },
+    { type: 'usage', usage },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ],
+  providerError: (message: string): StreamChunk[] => [
+    { type: 'finish', reason: { kind: 'error', failure: { message, code: 'PROVIDER_ERROR' } } },
+  ],
+  aborted: (): StreamChunk[] => [
+    { type: 'finish', reason: { kind: 'aborted', failure: { message: 'cancelled', code: 'ABORTED' } } },
+  ],
+  /** Cut off by the generation cap: the text is whatever fitted, and must never be used. */
+  lengthStop: (partial: string, usage: TokenUsage = DEFAULT_USAGE): StreamChunk[] => [
+    { type: 'text-delta', index: 0, text: partial },
+    { type: 'usage', usage },
+    { type: 'finish', reason: { kind: 'max-tokens' } },
+  ],
+  toolCall: (): StreamChunk[] => [
+    { type: 'tool-call-delta', index: 0, id: CallId('summary-call'), name: 'bash', argumentsDelta: '{"cmd":"ls"}' },
+    { type: 'finish', reason: { kind: 'tool-calls' } },
+  ],
+  empty: (): StreamChunk[] => [{ type: 'usage', usage: DEFAULT_USAGE }, { type: 'finish', reason: { kind: 'stop' } }],
+  /** A "successful" call whose output is an image: unsafe as a checkpoint, the same as the host's own summarizer. */
+  image: (): StreamChunk[] => [
+    {
+      type: 'block-end',
+      index: 0,
+      block: { type: 'image', attachment: { attachmentId: AttachmentId('checkpoint-image'), mediaType: 'image/png', bytes: 5_000, width: 100, height: 100 } },
+    },
+    { type: 'usage', usage: DEFAULT_USAGE },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ],
+}
+
+async function mount(
+  contextWindow: number,
+  reply: Reply | undefined,
+  providers: readonly string[] = [],
+): Promise<{ ctx: Context; adapter: ScriptedAdapter }> {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -50,8 +106,27 @@ export async function harness(contextWindow = 10_000): Promise<Context> {
   await ctx.plugin(InvariantRegistry)
   await ctx.plugin(SessionInvariant)
   await ctx.plugin(CompactionInvariant)
-  ctx.llm.registerAdapter([MODEL], new WindowAdapter(contextWindow))
-  return ctx
+  const adapter = new ScriptedAdapter(contextWindow, reply)
+  ctx.llm.registerAdapter([MODEL, ...providers], adapter)
+  return { ctx, adapter }
+}
+
+/** The masking harness: a model call here is a failure. */
+export async function harness(contextWindow = 10_000): Promise<Context> {
+  return (await mount(contextWindow, undefined)).ctx
+}
+
+/**
+ * The checkpoint harness: the same host, with a route that answers as scripted and records every
+ * request it was asked. `providers` are further routes served by the same adapter, so a configured
+ * summarizer can differ from the session's model.
+ */
+export async function scriptedHarness(
+  reply: Reply,
+  options: { contextWindow?: number; providers?: readonly string[] } = {},
+): Promise<{ ctx: Context; calls: readonly GenerateOptions[] }> {
+  const { ctx, adapter } = await mount(options.contextWindow ?? 10_000, reply, options.providers)
+  return { ctx, calls: adapter.calls }
 }
 
 export const observationBody = (n: number): string => `line of build output ${n}\n`.repeat(200)
@@ -65,7 +140,7 @@ export function appendClosedTurn(
   turn: number,
   body: string | ContentBlock[],
   usage?: { inputTokens: number; outputTokens: number },
-  options: { isError?: boolean; name?: string } = {},
+  options: { isError?: boolean; name?: string; unrouted?: boolean } = {},
 ): number {
   const name = options.name ?? 'bash'
   session.append('turn/start', { turn })
@@ -74,7 +149,7 @@ export function appendClosedTurn(
     source: { kind: 'user' },
   }), { surfaceOp: 'append' })
   session.append('step/start', { turn, step: 1 })
-  if (turn === 1) {
+  if (turn === 1 && options.unrouted !== true) {
     session.append('request/header', { header: { config: { provider: MODEL, model: MODEL } }, reason: 'initial' })
   }
   const callId = CallId(`call-${turn}`)
@@ -179,10 +254,14 @@ export function sequence(session: Session, from: number): string[] {
  * The minimal agent the compaction seam needs: a session, routing options, and idle-task
  * scheduling. `maintenanceSignal` is the agent's own cancellation, handed to an idle task.
  */
-export function agentFor(session: Session, maintenanceSignal: AbortSignal = new AbortController().signal): Agent {
+export function agentFor(
+  session: Session,
+  maintenanceSignal: AbortSignal = new AbortController().signal,
+  options: { provider?: string; model?: string } = { provider: MODEL, model: MODEL },
+): Agent {
   return {
     session,
-    options: { provider: MODEL, model: MODEL },
+    options,
     runMaintenance: <T>(task: (signal: AbortSignal) => Promise<T>) => task(maintenanceSignal),
   } as unknown as Agent
 }
@@ -212,4 +291,17 @@ export function expectedAfter(before: Accounting, shadowed: number, replacement:
     breakdownMessages: before.surface + delta,
     projected: before.projected === undefined ? undefined : before.projected + delta,
   }
+}
+
+/** The fixture conversations are small; this budget puts their masked history over the checkpoint line. */
+export class TightBudget extends MaskpointCompactionEngine {
+  protected override readonly budget = { checkpointTriggerTokens: 50 }
+}
+
+/** The balanced span from the first surface node through the last node of the last closed turn. */
+export function closedRegion(session: Session): { start: number; end: number; seqs: number[] } {
+  const open = session.events.findLast((event) => event.type === 'turn/start' && event.data.turn === 4)
+  const limit = open?.seq ?? session.events.length
+  const seqs = session.surface.nodes.filter((seq) => seq < limit)
+  return { start: seqs[0]!, end: seqs.at(-1)!, seqs }
 }
