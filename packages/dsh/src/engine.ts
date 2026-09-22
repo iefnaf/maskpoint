@@ -1,26 +1,24 @@
-import { decide } from '@maskpoint/core'
-import type { BudgetPolicy, CapabilityProfile, ConversationSnapshot, Item } from '@maskpoint/core'
+import { DEFAULT_BUDGET, run } from '@maskpoint/core'
+import type { BudgetPolicy, CapabilityProfile } from '@maskpoint/core'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { Session } from '@deepseek-ai/dsh-session'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 // Type-only: makes the optional sibling pruner service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+import { hostCheckpointDeps } from './checkpoint.js'
 import type { SummarizationInput, SummaryResult } from './host-types.js'
 import { maskInPlace } from './inplace.js'
-import { normalizeMessages } from './normalize.js'
-import { PolicyError, resolveTrigger } from './policy.js'
+import { conversationRoute, PolicyError, resolveSummarizer, resolveTrigger } from './policy.js'
 import type { TriggerSpec } from './policy.js'
 import { selectRange } from './range.js'
 import { assertCanCompactInTurn } from './session-state.js'
 import { contentBlocks } from './render.js'
+import { regionSnapshot } from './snapshot.js'
 
 /** The envelope a model-free landing records: honest about who wrote the history. */
 export const MASKPOINT_PROVIDER = 'maskpoint'
 export const MASK_ONLY_MODEL = 'mask-only'
-
-/** Design default; a tuning parameter, not a derived constant. Configuration is a later ticket. */
-export const DEFAULT_BUDGET: BudgetPolicy = { checkpointTriggerTokens: 12_000 }
 
 /**
  * What this adapter can actually do, published so the tier is never overstated. It replaces the
@@ -38,9 +36,6 @@ export const capabilities: CapabilityProfile = {
 /** Overflow keeps no tail and has no threshold: it forces one useful reduction. */
 const NO_TAIL: TriggerSpec = { thresholdTokens: 0, retainTokens: 0 }
 
-/** Marks the end of the compacted region for the engine, which is handed a boundary, not a region. */
-const REGION_END: Item = { id: '\u0000maskpoint:region-end', kind: 'opaque', note: 'end of compacted region' }
-
 /**
  * Maskpoint as a DSH compaction backend.
  *
@@ -52,6 +47,9 @@ const REGION_END: Item = { id: '\u0000maskpoint:region-end', kind: 'opaque', not
 export class MaskpointCompactionEngine extends BasicCompactionEngine {
   private readonly warnedTargets = new Set<string>()
   private readonly warnedAbove = new WeakSet<Session>()
+
+  /** The checkpoint trigger. Design default; a tuning parameter, not a derived constant. Configuration is a later ticket. */
+  protected readonly budget: BudgetPolicy = DEFAULT_BUDGET
 
   /**
    * Automatic compaction (step-boundary pressure, or one provider-confirmed context overflow).
@@ -119,57 +117,82 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
   }
 
   /**
-   * Masking alone may leave a session above the trigger, and until the checkpoint path exists (#11)
-   * nothing else will shrink it. Said once per stretch above the line, so a stuck session is visible
-   * without a warning on every step.
+   * Masking alone may leave a session above the trigger. The automatic entry lands per observation
+   * through the host's prune protocol (spike #9), which has no way to carry a model-authored
+   * checkpoint, so it never makes the checkpoint call the explicit entries can (#11); an idle
+   * `/compact` or explicit region compaction is what brings the session back down. Said once per
+   * stretch above the line, so a stuck session is visible without a warning on every step.
    */
   private warnIfStillAbove(session: Session, totalTokens: number, thresholdTokens: number): void {
     if (totalTokens < thresholdTokens) {
       this.warnedAbove.delete(session)
     } else if (!this.warnedAbove.has(session)) {
       this.warnedAbove.add(session)
-      this.ctx.logger.warn(`maskpoint: still above the ${thresholdTokens}-token threshold after masking; no checkpoint path is enabled`)
+      this.ctx.logger.warn(`maskpoint: still above the ${thresholdTokens}-token threshold after masking; the automatic entry has no checkpoint path`)
     }
   }
 
   /**
-   * Masked history for a region, in place of a model-written summary. Model-free: the returned
-   * envelope carries no summarization-call marker and no usage.
+   * Masked history for a region, or — over budget, or when the caller asked for one — a checkpoint:
+   * one call through the host's LLM seam, condensing the accumulated masked history. A checkpoint
+   * carries a real summarization-call marker and usage; the model-free landing carries neither.
+   *
+   * Rejection and fallback are exactly what the engine defines: any outcome other than an accepted
+   * checkpoint returns masked history, never empty and never partial.
    */
-  protected override summarize(input: SummarizationInput, _agent: Agent, signal?: AbortSignal): Promise<SummaryResult> {
+  protected override async summarize(input: SummarizationInput, agent: Agent, signal?: AbortSignal): Promise<SummaryResult> {
     signal?.throwIfAborted()
-    const items = normalizeMessages(input.messages)
-    // State heading the region is what an earlier compaction left (as the host names it, a
-    // checkpoint; it may be masked history): continue from it, do not re-mask or re-frame it.
-    const head = items[0]
-    const previous = head?.kind === 'checkpoint' && head.text !== '' ? head : undefined
-    const snapshot: ConversationSnapshot = {
-      items: [...items, REGION_END],
-      boundary: { id: REGION_END.id },
-      reason: 'manual',
-      ...(previous === undefined ? {} : { previousCheckpoint: previous.text, evictedThrough: previous.id }),
-    }
-    const decision = decide(snapshot, DEFAULT_BUDGET)
-    // Until the checkpoint path lands (#11) an over-budget candidate is still returned as masked
-    // history: the fallback the engine defines for a rejected checkpoint.
-    const outcome = decision.kind === 'checkpoint-requested' ? decision.fallback : decision
-    if (outcome.kind !== 'masked-history') {
+    const snapshot = regionSnapshot(input.messages)
+    const routed = agent.session.requestHeader()?.config
+    const conversation = conversationRoute(routed, agent.options)
+    const summarizer = resolveSummarizer(this.config, conversation)
+    const cancellation = signal ?? new AbortController().signal
+    const { deps, accepted } = hostCheckpointDeps(this.ctx.llm, {
+      route: summarizer.route,
+      maxTokens: summarizer.maxTokens,
+      signal: cancellation,
+    })
+
+    const outcome = await run(snapshot, this.budget, deps)
+    if (outcome.kind === 'decline') {
       // A decline is the engine saying this region cannot be trusted or is empty. The host's
       // transaction closes the attempt and reports it as its `summary` failure, unchanged history.
-      const reason = outcome.kind === 'decline' ? outcome.reason : outcome.kind
-      this.ctx.logger.warn(`maskpoint (explicit): declined — ${reason}`)
-      return Promise.reject(new Error(`maskpoint: cannot mask this region (${reason})`))
+      this.ctx.logger.warn(`maskpoint (explicit): declined — ${outcome.reason}`)
+      throw new Error(`maskpoint: cannot mask this region (${outcome.reason})`)
+    }
+
+    if (outcome.kind === 'checkpoint') {
+      const call = accepted()
+      if (call === undefined) throw new Error('maskpoint: checkpoint accepted with no recorded call')
+      const usage = call.usage === undefined ? '' : `, usage ${call.usage.inputTokens} in / ${call.usage.outputTokens} out`
+      this.ctx.logger.info(
+        `maskpoint (explicit): strategy checkpoint, candidate ~${outcome.stats.candidateTokens} tokens, ` +
+          `checkpoint via ${call.provider}/${call.model}${usage}`,
+      )
+      return {
+        summary: contentBlocks.render(outcome.artifact),
+        provider: call.provider,
+        model: call.model,
+        maxTokens: summarizer.maxTokens,
+        rawOutput: call.rawOutput,
+        llmStreamCall: true,
+        ...(call.usage === undefined ? {} : { usage: call.usage }),
+      }
+    }
+
+    if (outcome.checkpointRejection !== undefined) {
+      this.ctx.logger.warn(`maskpoint (explicit): checkpoint ${outcome.checkpointRejection}; falling back to masked history`)
     }
     const { stats } = outcome
     this.ctx.logger.info(
       `maskpoint (explicit): strategy mask, ${stats.observationsMasked} observations masked, ` +
         `${stats.charsOmitted} chars omitted, candidate ~${stats.candidateTokens} tokens, no checkpoint`,
     )
-    return Promise.resolve({
+    return {
       summary: contentBlocks.render(outcome.artifact),
       provider: MASKPOINT_PROVIDER,
       model: MASK_ONLY_MODEL,
-    })
+    }
   }
 }
 

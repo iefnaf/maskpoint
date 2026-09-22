@@ -2,20 +2,11 @@ import { HISTORY_FRAMING } from '@maskpoint/core'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { ManualCompactionError, isCompactCheckpointSource, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
 import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { Session } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import MaskpointCompactionEngine from '../src/index.js'
-import { accounting, agentFor, appendClosedTurn, conversation, harness, MODEL, sequence, surfaceText } from './harness.js'
+import { accounting, agentFor, appendClosedTurn, closedRegion, conversation, harness, MODEL, sequence, surfaceText } from './harness.js'
 
 const signal = new AbortController().signal
-
-/** The balanced span from the first surface node through the last node of the last closed turn. */
-function closedRegion(session: Session): { start: number; end: number; seqs: number[] } {
-  const open = session.events.findLast((event) => event.type === 'turn/start' && event.data.turn === 4)
-  const limit = open?.seq ?? session.events.length
-  const seqs = session.surface.nodes.filter((seq) => seq < limit)
-  return { start: seqs[0]!, end: seqs.at(-1)!, seqs }
-}
 
 describe('explicit idle-session compaction (compactNow)', () => {
   it('lands a model-free masked-history replacement between turns and keeps the host accounting exact', async () => {

@@ -3,7 +3,7 @@ import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import { describe, expect, it } from 'vitest'
 import type { SummaryResult } from '../src/host-types.js'
 import MaskpointCompactionEngine from '../src/index.js'
-import { agentFor, conversation, harness, maskedSeqsOf, MODEL } from './harness.js'
+import { agentFor, conversation, harness, maskedSeqsOf, MODEL, replies, scriptedHarness, TightBudget } from './harness.js'
 
 const signal = new AbortController().signal
 
@@ -77,5 +77,43 @@ describe('trigger and retention parity with the host backend (drift guard)', () 
       triggered.add((await host.compaction.compactIfNeeded(agentFor(session), trigger, signal)) !== null)
     }
     expect(triggered).toEqual(new Set([true, false]))
+  })
+})
+
+const SUMMARIZER_CASES: ReadonlyArray<readonly [string, BasicCompactionConfig]> = [
+  ['defaults: the session route, the default generation cap', {}],
+  ['a configured summarization provider and model', { summarizationProvider: 'other-provider', summarizationModel: 'other-model' }],
+  ['a configured generation cap', { maxTokens: 500 }],
+  [
+    'an exact-model override for the session route',
+    { modelPolicies: [{ provider: MODEL, model: MODEL, summarizationProvider: 'override-provider', summarizationModel: 'override-model', maxTokens: 250 }] },
+  ],
+  [
+    'an override for another model, which must not apply',
+    { modelPolicies: [{ provider: 'other', model: 'other', summarizationProvider: 'wrong-provider', summarizationModel: 'wrong-model' }] },
+  ],
+]
+
+describe('checkpoint summarizer-target parity with the host backend (drift guard)', () => {
+  it.each(SUMMARIZER_CASES)('%s', async (_label, config) => {
+    const providers = ['other-provider', 'override-provider', 'wrong-provider']
+
+    const { ctx: host, calls: hostCalls } = await scriptedHarness(() => replies.text('host summary'), { providers })
+    await host.plugin(BasicCompactionEngine, { ...config, auto: false })
+    await host.compaction.compactNow(agentFor(conversation(host, { openTurn: false }).session), signal)
+
+    const { ctx: ours, calls: oursCalls } = await scriptedHarness(() => replies.text('our checkpoint'), { providers })
+    await ours.plugin(TightBudget, { ...config, auto: false })
+    await ours.compaction.compactNow(agentFor(conversation(ours, { openTurn: false }).session), signal)
+
+    // The host always calls its summarizer on /compact; ours only does over budget (TightBudget
+    // forces that here). Once each calls, they must resolve the exact same provider, model, and cap.
+    expect(hostCalls).toHaveLength(1)
+    expect(oursCalls).toHaveLength(1)
+    expect({ provider: oursCalls[0]!.provider, model: oursCalls[0]!.model, maxTokens: oursCalls[0]!.maxTokens }).toEqual({
+      provider: hostCalls[0]!.provider,
+      model: hostCalls[0]!.model,
+      maxTokens: hostCalls[0]!.maxTokens,
+    })
   })
 })
