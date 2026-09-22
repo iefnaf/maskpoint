@@ -101,18 +101,25 @@ const textOf = (content: PiAssistantMessage['content']): string =>
     .map((block) => block.text)
     .join('\n')
 
+/** No model is configured or authenticated for this session. Caught by the engine's checkpoint call, which falls back to masked history. */
+class NoModelConfigured extends Error {
+  override readonly name = 'NoModelConfigured'
+}
+
 /**
  * The engine's one checkpoint call, translated into Pi's `modelRegistry.complete`. Absent
  * `deps.checkpoint.model` always means the session's active model in this version: there is no
- * per-checkpoint model configuration yet.
+ * per-checkpoint model configuration yet. `signal` is Pi's own, taken from the event rather than
+ * round-tripped through the engine's host-agnostic `CancellationSignal`, so a real provider call
+ * never receives a stand-in object dressed up as one.
  */
-async function completeWith(ctx: PiContext, request: ModelRequest): Promise<ModelResponse> {
+async function completeWith(ctx: PiContext, request: ModelRequest, signal: AbortSignal | undefined): Promise<ModelResponse> {
   const model = ctx.model
-  if (model === undefined) throw new Error('no model is configured for this session')
+  if (model === undefined) throw new NoModelConfigured('no model is configured for this session')
   const reply = await ctx.modelRegistry.complete(
     model,
     { systemPrompt: request.instructions, messages: [{ role: 'user', content: request.input, timestamp: Date.now() }] },
-    { maxTokens: request.maxOutputTokens, signal: request.signal as AbortSignal, cacheRetention: 'none', sessionId: request.routingId },
+    { maxTokens: request.maxOutputTokens, signal, cacheRetention: 'none', sessionId: request.routingId },
   )
   return {
     stopReason: stopReasonOf(reply.stopReason),
@@ -123,7 +130,7 @@ async function completeWith(ctx: PiContext, request: ModelRequest): Promise<Mode
 
 function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext): EngineDeps {
   return {
-    complete: (request) => completeWith(ctx, request),
+    complete: (request) => completeWith(ctx, request, event.signal),
     newRoutingId: () => crypto.randomUUID(),
     signal: event.signal ?? { aborted: false },
     checkpoint: { maxOutputTokens: CHECKPOINT_MAX_OUTPUT_TOKENS },

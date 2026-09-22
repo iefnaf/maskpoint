@@ -76,7 +76,7 @@ export interface PiModel {
 
 export interface PiCompleteOptions {
   maxTokens?: number
-  signal?: AbortSignal
+  signal?: AbortSignal | undefined
   cacheRetention?: 'none' | 'default'
   sessionId?: string
 }
