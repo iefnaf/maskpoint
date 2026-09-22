@@ -78,7 +78,16 @@ describe('auditSummaryReport', () => {
     const dir = tmpDir()
     appendAudit(dir, { v: 1, sessionId: 's1', at: 't1', artifactChars: 10, hostSummaryChars: 5, salientTerms: 2, coveredTerms: 1, coverage: 0.5, steered: true })
     const report = JSON.parse(auditSummaryReport(dir))
-    expect(report).toMatchObject({ compactions: 1, meanCoverage: 0.5, steeredCoverage: 0.5, steeringActiveRate: 1 })
+    expect(report).toMatchObject({
+      compactions: 1,
+      meanCoverage: 0.5,
+      steeredCoverage: 0.5,
+      steeringActiveRate: 1,
+      meanArtifactChars: 10,
+      meanHostSummaryChars: 5,
+      meanDuplicationRatio: 2,
+      duplicationRatioSamples: 1,
+    })
   })
 
   it('renders a vacuous summary when nothing has been audited yet', () => {
