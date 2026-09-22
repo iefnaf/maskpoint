@@ -11,11 +11,15 @@ import { runDsh, runPi } from './support/host-runs.js'
  */
 const EXCLUDED: Record<string, string> = {
   cjk: [
-    'Carries customInstructions. Pi declines with checkpoint-unavailable: a focus needs a model',
-    "and this adapter makes none yet (issue #7). DSH's engine does not read customInstructions",
-    'from the host at all yet (its own checkpoint path is issue #11), so it masks normally',
-    'instead of declining for the same input. The two adapters take genuinely different paths',
-    'today; pinned directly below instead of run through the generic comparison.',
+    'Carries customInstructions. Pi attempts its issue-#7 checkpoint call, but this harness',
+    'configures no model (fakePiContext — the same zero-LLM path every other fixture takes), so the',
+    "call rejects and falls back to masked history; that fallback does not satisfy Pi's own",
+    "strict-shrink guard for this fixture, so Pi declines no-size-reduction. DSH's",
+    'SummarizationInput still carries no customInstructions field at all (its own checkpoint path,',
+    'issue #11, has no way to see them), so it masks normally instead of declining. The two',
+    'adapters still take genuinely different paths for this input, just not for the reason this',
+    'comment used to give before #7 landed; pinned directly below instead of run through the',
+    'generic comparison.',
   ].join(' '),
   'parallel-tool-calls': [
     "Pi's own adapter enforces \"the result must strictly shrink\" itself, measured by",
@@ -49,7 +53,7 @@ describe('cross-platform parity: the shared corpus through the Pi and DSH adapte
     if (fixture.name in EXCLUDED) continue
 
     it(`${fixture.name}: same outcome, statistics, and masked-history text on both adapters`, async () => {
-      const pi = runPi(fixture.snapshot)
+      const pi = await runPi(fixture.snapshot)
       const dsh = await runDsh(fixture.snapshot)
 
       expect(dsh.outcome, `dsh outcome for "${fixture.name}"`).toBe(pi.outcome)
@@ -63,11 +67,11 @@ describe('cross-platform parity: the shared corpus through the Pi and DSH adapte
   }
 })
 
-describe('documented divergence: custom instructions, before issues #7 and #11 both land', () => {
+describe('documented divergence: custom instructions', () => {
   const fixture = findFixture('cjk')
 
-  it('Pi declines: a focus needs a model, and this adapter makes none', () => {
-    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'checkpoint-unavailable' })
+  it("Pi declines: its checkpoint call has no model configured, and the masked-history fallback does not shrink", async () => {
+    expect(await runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'no-size-reduction' })
   })
 
   it("DSH masks normally: its explicit compaction input carries no customInstructions field yet", async () => {
@@ -79,8 +83,8 @@ describe('documented divergence: custom instructions, before issues #7 and #11 b
 describe('documented gap: no-size-reduction thresholds are estimator-specific', () => {
   const fixture = findFixture('parallel-tool-calls')
 
-  it("Pi declines: its own estimator says the framed result would not shrink the context", () => {
-    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'no-size-reduction' })
+  it("Pi declines: its own estimator says the framed result would not shrink the context", async () => {
+    expect(await runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'no-size-reduction' })
   })
 
   it('DSH masks: engine.ts asserts no shrink guard of its own for the explicit path', async () => {

@@ -1,8 +1,23 @@
+import { DEFAULT_BUDGET } from '@maskpoint/core'
 import type { ConversationSnapshot, Stats } from '@maskpoint/core'
-import { planCompaction } from '@maskpoint/pi'
+import { planCompaction, type PiContext } from '@maskpoint/pi'
 import MaskpointCompactionEngine from '@maskpoint/dsh'
 import { buildDshMessages } from './dsh-encoding.js'
 import { buildPiEvent } from './pi-encoding.js'
+
+/**
+ * A minimal `PiContext`: no model configured, so a checkpoint call (issue #7) always falls back to
+ * masked history rather than actually calling a provider — this harness compares the zero-LLM
+ * masking path, the same one DSH's `summarize()` call below never leaves either.
+ */
+function fakePiContext(): PiContext {
+  return {
+    hasUI: false,
+    ui: { notify: () => {} },
+    model: undefined,
+    modelRegistry: { complete: () => Promise.reject(new Error('host-runs: no checkpoint call is expected in this harness')) },
+  }
+}
 
 /**
  * What both adapters reduce to, so the same assertions can run over either. `outcome` uses the
@@ -21,8 +36,8 @@ export interface HostRun {
 }
 
 /** Drives the Pi adapter's real, exported `planCompaction` over a synthetic recording. */
-export function runPi(snapshot: ConversationSnapshot): HostRun {
-  const effect = planCompaction(buildPiEvent(snapshot))
+export async function runPi(snapshot: ConversationSnapshot): Promise<HostRun> {
+  const effect = await planCompaction(buildPiEvent(snapshot), fakePiContext())
   if (effect.kind === 'decline') return { host: 'pi', outcome: 'decline', reason: effect.reason }
   return { host: 'pi', outcome: 'masked-history', text: effect.summary, stats: effect.detail.stats }
 }
@@ -35,19 +50,50 @@ const STRATEGY_LINE =
 const DECLINE_ERROR = /^maskpoint: cannot mask this region \((.+)\)$/
 
 /**
+ * The config `resolveConfig()` (unexported, so restated) would produce from no plugin config at
+ * all: every `CompactionPolicyConfig` default from `@deepseek-ai/dsh-compaction-basic`'s own
+ * doc-comments. An empty `summarizationProvider`/`summarizationModel` means "inherit the
+ * conversation's own route" (`resolveSummarizer`), which the fake agent below leaves unset — the
+ * same "no model configured, so a checkpoint always falls back to masked history" choice as
+ * `fakePiContext` above.
+ */
+const FAKE_RESOLVED_CONFIG = {
+  thresholdRatio: 0.8,
+  retainRatio: 0.16,
+  summarizationProvider: '',
+  summarizationModel: '',
+  maxTokens: 8192,
+  compactionRetries: 1,
+  maxOverflowRetries: 1,
+  modelPolicies: [],
+  auto: true,
+}
+
+/**
  * Drives the DSH adapter's real, exported `summarize()` over a synthetic region, the same method
- * the host's compaction transaction calls. It reads only `this.ctx.logger`, so it is called
- * unbound against a minimal fake context instead of a full cordis host (dsh's own conformance
- * suite, `packages/dsh/test/`, is what exercises the surrounding transaction).
+ * the host's compaction transaction calls. It reads `this.ctx.logger`, `this.ctx.llm`, `this.budget`,
+ * and `this.config`, plus `agent.session.requestHeader()` and `agent.options`, so it is called
+ * unbound against a minimal fake engine and a minimal fake `Agent` instead of a full cordis host
+ * (dsh's own conformance suite, `packages/dsh/test/`, is what exercises the surrounding transaction).
+ * No route is ever configured on the fake agent, so `resolveSummarizer` always yields no route and
+ * a checkpoint call is never actually made — the same zero-LLM masking path `fakePiContext` targets.
  */
 export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
   const input = buildDshMessages(snapshot)
   const info: string[] = []
-  const fakeEngine = { ctx: { logger: { info: (message: string) => info.push(message), warn: () => {} } } }
+  const fakeEngine = {
+    ctx: {
+      logger: { info: (message: string) => info.push(message), warn: () => {} },
+      llm: { stream: () => Promise.reject(new Error('host-runs: no checkpoint call is expected in this harness')) },
+    },
+    budget: DEFAULT_BUDGET,
+    config: FAKE_RESOLVED_CONFIG,
+  }
+  const fakeAgent = { session: { requestHeader: () => undefined }, options: {} }
   const summarize = (MaskpointCompactionEngine.prototype as unknown as { summarize: (...args: unknown[]) => Promise<{ summary: { type: string; text?: string }[] }> }).summarize
 
   try {
-    const result = await summarize.call(fakeEngine, input, undefined, new AbortController().signal)
+    const result = await summarize.call(fakeEngine, input, fakeAgent, new AbortController().signal)
     const line = info.find((each) => STRATEGY_LINE.test(each))
     const match = line === undefined ? null : STRATEGY_LINE.exec(line)
     if (match === null) throw new Error(`dsh-run: no statistics line in the log (${JSON.stringify(info)})`)
