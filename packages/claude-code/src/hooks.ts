@@ -1,3 +1,4 @@
+import { budgetOf, type EngineConfig } from '@maskpoint/core'
 import { auditDrift } from './audit.js'
 import { capabilities, planCompaction } from './compact.js'
 import { isRecord, type Rec } from './normalize.js'
@@ -16,6 +17,8 @@ export interface HookPorts {
    * produced, persisted, and re-injected — only whether the host's own summarizer was nudged.
    */
   steering: boolean
+  /** Resolved once per invocation by `config.ts` (issue #8): enablement, the checkpoint budget, notification level. */
+  config: EngineConfig
 }
 
 export interface HookResult {
@@ -32,6 +35,14 @@ const STEERING =
   'failures when summarizing. Earlier history already has stale tool output replaced by placeholders.'
 
 function preCompact(payload: Rec, ports: HookPorts): HookResult {
+  // Disabled: behave exactly as if Maskpoint were not installed. No transcript read, no state
+  // written, no steering — nothing for a later hook invocation to find (docs/spec.md, Configuration:
+  // "disable Maskpoint per project and globally, so that I can fall back to the host's own behavior").
+  if (!ports.config.enabled) {
+    ports.log('maskpoint: disabled by configuration')
+    return { stdout: '', exitCode: 0 }
+  }
+
   const sessionId = str(payload.session_id)
   const transcriptPath = str(payload.transcript_path)
   if (sessionId === undefined || transcriptPath === undefined) {
@@ -43,7 +54,8 @@ function preCompact(payload: Rec, ports: HookPorts): HookResult {
   const customInstructions = str(payload.custom_instructions)
   const entries = readTranscript(transcriptPath)
   const prior = readState(ports.stateDir, sessionId)
-  const effect = planCompaction(entries, { trigger, ...(customInstructions === undefined ? {} : { customInstructions }) }, prior)
+  const budget = budgetOf(ports.config)
+  const effect = planCompaction(entries, { trigger, ...(customInstructions === undefined ? {} : { customInstructions }) }, prior, budget)
 
   if (effect.kind === 'decline') {
     ports.log(`maskpoint: declined (${effect.reason}${effect.note === undefined ? '' : `: ${effect.note}`})`)
@@ -58,14 +70,16 @@ function preCompact(payload: Rec, ports: HookPorts): HookResult {
     steered: ports.steering,
     updatedAt: ports.now().toISOString(),
   })
-  const { observationsMasked, charsOmitted } = effect.detail.stats
-  const flags = [effect.overBudget && 'over budget', effect.focusRequested && 'focus requested'].filter(Boolean).join(', ')
-  ports.log(`maskpoint: assisted (masked ${observationsMasked} observations, ${charsOmitted} chars omitted${flags === '' ? '' : `, ${flags}`})`)
-  // Feature-detection of this undocumented channel is bounded by what a single hook invocation can
-  // know: whether it was attempted here. Recording it explicitly, every time, is what lets the
-  // channel's disappearance show up in the audit trail instead of reading as merely low coverage
-  // (docs/design.md, Open issue 7).
-  ports.log(`maskpoint: steering channel ${ports.steering ? 'active' : 'inactive (disabled)'}`)
+  if (ports.config.notificationLevel !== 'silent') {
+    const { observationsMasked, charsOmitted } = effect.detail.stats
+    const flags = [effect.overBudget && 'over budget', effect.focusRequested && 'focus requested'].filter(Boolean).join(', ')
+    ports.log(`maskpoint: assisted (masked ${observationsMasked} observations, ${charsOmitted} chars omitted${flags === '' ? '' : `, ${flags}`})`)
+    // Feature-detection of this undocumented channel is bounded by what a single hook invocation can
+    // know: whether it was attempted here. Recording it explicitly, every time, is what lets the
+    // channel's disappearance show up in the audit trail instead of reading as merely low coverage
+    // (docs/design.md, Open issue 7).
+    ports.log(`maskpoint: steering channel ${ports.steering ? 'active' : 'inactive (disabled)'}`)
+  }
 
   // Never blocking, never JSON: this stdout is the undocumented steering channel, not the
   // documented re-injection one. See docs/design.md, Claude Code adapter.
@@ -73,6 +87,7 @@ function preCompact(payload: Rec, ports: HookPorts): HookResult {
 }
 
 function sessionStart(payload: Rec, ports: HookPorts): HookResult {
+  if (!ports.config.enabled) return { stdout: '', exitCode: 0 }
   if (payload.source !== 'compact') return { stdout: '', exitCode: 0 }
   const sessionId = str(payload.session_id)
   if (sessionId === undefined) return { stdout: '', exitCode: 0 }
@@ -83,7 +98,9 @@ function sessionStart(payload: Rec, ports: HookPorts): HookResult {
   const full = injectedContext(prior.checkpointText)
   const fits = full.length <= cap
   const additionalContext = fits ? full : injectedPointer(statePathFor(ports.stateDir, sessionId), prior.checkpointText.length)
-  ports.log(`maskpoint: re-injected ${fits ? 'artifact' : 'pointer to persisted state'} (${additionalContext.length} chars)`)
+  if (ports.config.notificationLevel !== 'silent') {
+    ports.log(`maskpoint: re-injected ${fits ? 'artifact' : 'pointer to persisted state'} (${additionalContext.length} chars)`)
+  }
 
   return {
     stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext } }),
@@ -92,6 +109,7 @@ function sessionStart(payload: Rec, ports: HookPorts): HookResult {
 }
 
 function postCompact(payload: Rec, ports: HookPorts): HookResult {
+  if (!ports.config.enabled) return { stdout: '', exitCode: 0 }
   const sessionId = str(payload.session_id)
   if (sessionId === undefined) return { stdout: '', exitCode: 0 }
   const prior = readState(ports.stateDir, sessionId)
@@ -102,8 +120,10 @@ function postCompact(payload: Rec, ports: HookPorts): HookResult {
   // this cannot delay the user's next turn (docs/design.md, Claude Code scenario).
   const drift = auditDrift(prior.checkpointText, hostSummary)
   appendAudit(ports.stateDir, { v: 1, sessionId, at: ports.now().toISOString(), ...drift, ...(prior.steered === undefined ? {} : { steered: prior.steered }) })
-  const steeredNote = prior.steered === undefined ? '' : `, steering ${prior.steered ? 'on' : 'off'}`
-  ports.log(`maskpoint: audit coverage ${Math.round(drift.coverage * 100)}% (${drift.coveredTerms}/${drift.salientTerms} terms${steeredNote})`)
+  if (ports.config.notificationLevel !== 'silent') {
+    const steeredNote = prior.steered === undefined ? '' : `, steering ${prior.steered ? 'on' : 'off'}`
+    ports.log(`maskpoint: audit coverage ${Math.round(drift.coverage * 100)}% (${drift.coveredTerms}/${drift.salientTerms} terms${steeredNote})`)
+  }
   return { stdout: '', exitCode: 0 }
 }
 

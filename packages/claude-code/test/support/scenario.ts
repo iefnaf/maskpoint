@@ -1,6 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DEFAULT_ENGINE_CONFIG, type EngineConfig } from '@maskpoint/core'
 import { afterEach } from 'vitest'
 import { runHook } from '../../src/hooks.js'
 import { type Entry, jsonl } from './transcript.js'
@@ -30,7 +31,7 @@ export interface Scenario {
   mode(path: string): number
 }
 
-export function scenario(options: { steering?: boolean } = {}): Scenario {
+export function scenario(options: { steering?: boolean; config?: Partial<EngineConfig> } = {}): Scenario {
   const root = mkdtempSync(join(tmpdir(), 'maskpoint-cc-'))
   roots.push(root)
   const stateDir = join(root, 'state')
@@ -41,6 +42,7 @@ export function scenario(options: { steering?: boolean } = {}): Scenario {
     now: () => new Date('2026-09-21T10:30:00.000Z'),
     log: (line: string) => logs.push(line),
     steering: options.steering ?? true,
+    config: { ...DEFAULT_ENGINE_CONFIG, ...options.config },
   }
   const payload = (event: string, extra: Record<string, unknown>) =>
     JSON.stringify({ session_id: SESSION_ID, transcript_path: transcriptPath, cwd: '/workspace/app', hook_event_name: event, ...extra })

@@ -87,10 +87,27 @@ A checkpoint call that is attempted and not accepted (a provider error, an abort
 tool call, or an empty reply) is not a decline: Maskpoint still returns the masked history, with a
 note on why no checkpoint ran.
 
+## Configuration
+
+`PiContext.config`, if Pi's runtime supplies it for an installed extension, is resolved as
+Maskpoint's settings — `enabled`, `checkpointTriggerTokens`, `checkpointModel`, `notificationLevel` —
+the same shape every adapter shares. This package can do no I/O of its own (its own test suite pins
+every source import to a relative module or `@maskpoint/core` — no `node:fs`, no host SDK), so unlike
+Claude Code and DSH it cannot read a config file directly; `ctx.config` is its only channel, and,
+like the rest of this package's Pi-facing types, it is written structurally rather than against
+documented behavior — verify against a real Pi release before relying on it. `enabled: false` skips
+compaction entirely, the same as Maskpoint not being installed: no notification, no compaction entry.
+Lowering `checkpointTriggerTokens` moves the same conversation from a masked-history result into a
+checkpoint. `notificationLevel: "silent"` suppresses the routine interactive notice; a decline still
+shows one. An invalid value warns through the UI (when there is one) and falls back to the default,
+rather than failing the compaction.
+
 ## Not yet
 
 There is no per-checkpoint model configuration yet: a checkpoint always uses the session's active
-model. Branch summaries for `/tree` are a separate Pi mechanism and are not covered.
+model, even when `checkpointModel` is set — it is accepted and validated, but nothing in Pi's
+documented extension surface lets this package look up a model by id. Branch summaries for `/tree`
+are a separate Pi mechanism and are not covered.
 
 ## Tests
 

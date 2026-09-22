@@ -1,12 +1,16 @@
-import { DEFAULT_BUDGET, run } from '@maskpoint/core'
+import { budgetOf, type EngineConfig, run } from '@maskpoint/core'
 import type { BudgetPolicy, CapabilityProfile } from '@maskpoint/core'
+import type { Context } from '@deepseek-ai/cordis'
+import Schema from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { Session } from '@deepseek-ai/dsh-session'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
 // Type-only: makes the optional sibling pruner service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 import { hostCheckpointDeps } from './checkpoint.js'
+import { MASKPOINT_CONFIG_SCHEMA, resolveDshConfig, splitDshConfig } from './config.js'
 import type { SummarizationInput, SummaryResult } from './host-types.js'
 import { maskInPlace } from './inplace.js'
 import { conversationRoute, PolicyError, resolveSummarizer, resolveTrigger } from './policy.js'
@@ -15,6 +19,9 @@ import { selectRange } from './range.js'
 import { assertCanCompactInTurn } from './session-state.js'
 import { contentBlocks } from './render.js'
 import { regionSnapshot } from './snapshot.js'
+
+/** `BasicCompactionConfig` plus Maskpoint's own row fields (`config.ts`). */
+export type MaskpointDshConfig = BasicCompactionConfig & { enabled?: unknown; checkpointTriggerTokens?: unknown; notificationLevel?: unknown }
 
 /** The envelope a model-free landing records: honest about who wrote the history. */
 export const MASKPOINT_PROVIDER = 'maskpoint'
@@ -45,11 +52,23 @@ const NO_TAIL: TriggerSpec = { thresholdTokens: 0, retainTokens: 0 }
  * only the documented `summarize()` hook is ours.
  */
 export class MaskpointCompactionEngine extends BasicCompactionEngine {
+  /** The host's own schema, plus Maskpoint's row fields — one `config:` block, nothing new to manage. */
+  static override readonly Config = Schema.intersect([BasicCompactionEngine.Config, MASKPOINT_CONFIG_SCHEMA]) as Schemastery<MaskpointDshConfig>
+
   private readonly warnedTargets = new Set<string>()
   private readonly warnedAbove = new WeakSet<Session>()
 
-  /** The checkpoint trigger. Design default; a tuning parameter, not a derived constant. Configuration is a later ticket. */
-  protected readonly budget: BudgetPolicy = DEFAULT_BUDGET
+  /** Maskpoint's own resolved settings for this row (issue #8): `enabled`, the checkpoint budget, notification level. */
+  readonly maskpointConfig: EngineConfig
+  /** The checkpoint trigger, derived from `maskpointConfig`. A protected field, not a getter, so a test double can still override it directly. */
+  protected readonly budget: BudgetPolicy
+
+  constructor(ctx: Context, config?: MaskpointDshConfig) {
+    const { base, own } = splitDshConfig(config as Record<string, unknown> | undefined)
+    super(ctx, base)
+    this.maskpointConfig = resolveDshConfig(own, (message) => ctx.logger.warn(`maskpoint: config: ${message}`))
+    this.budget = budgetOf(this.maskpointConfig)
+  }
 
   /**
    * Automatic compaction (step-boundary pressure, or one provider-confirmed context overflow).
@@ -62,6 +81,9 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
    * can force one useful reduction; the surface's `replaceGeneration` advancing is its proof.
    */
   override async compactIfNeeded(agent: Agent, trigger: CompactionTrigger, signal: AbortSignal): Promise<CompactionResult | null> {
+    // Disabled: behave exactly like the built-in backend this class extends, so the host's own
+    // compactor is what runs — no masking, no checkpoint, no Maskpoint residue in session state.
+    if (!this.maskpointConfig.enabled) return super.compactIfNeeded(agent, trigger, signal)
     const { session } = agent
     const routed = session.requestHeader()?.config
     if (routed === undefined || routed.provider.length === 0 || routed.model.length === 0) return null
@@ -85,7 +107,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
 
     measurement = meter.measure(session)
     if (masked.observationsMasked > 0) {
-      this.ctx.logger.info(
+      this.infoLog(
         `maskpoint (${trigger}): strategy mask, ${masked.observationsMasked} observations masked, ` +
           `${masked.charsOmitted} chars omitted, ~${measurement.totalTokens} tokens now, no checkpoint`,
       )
@@ -132,6 +154,11 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     }
   }
 
+  /** Routine per-compaction logging, suppressed at `notificationLevel: 'silent'`. Warnings are never suppressed. */
+  private infoLog(message: string): void {
+    if (this.maskpointConfig.notificationLevel !== 'silent') this.ctx.logger.info(message)
+  }
+
   /**
    * Masked history for a region, or — over budget, or when the caller asked for one — a checkpoint:
    * one call through the host's LLM seam, condensing the accumulated masked history. A checkpoint
@@ -141,6 +168,8 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
    * checkpoint returns masked history, never empty and never partial.
    */
   protected override async summarize(input: SummarizationInput, agent: Agent, signal?: AbortSignal): Promise<SummaryResult> {
+    // Disabled: the host's own full-history summarizer, unmodified — the same fallback as above.
+    if (!this.maskpointConfig.enabled) return super.summarize(input, agent, signal)
     signal?.throwIfAborted()
     const snapshot = regionSnapshot(input.messages)
     const routed = agent.session.requestHeader()?.config
@@ -165,7 +194,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
       const call = accepted()
       if (call === undefined) throw new Error('maskpoint: checkpoint accepted with no recorded call')
       const usage = call.usage === undefined ? '' : `, usage ${call.usage.inputTokens} in / ${call.usage.outputTokens} out`
-      this.ctx.logger.info(
+      this.infoLog(
         `maskpoint (explicit): strategy checkpoint, candidate ~${outcome.stats.candidateTokens} tokens, ` +
           `checkpoint via ${call.provider}/${call.model}${usage}`,
       )
@@ -184,7 +213,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
       this.ctx.logger.warn(`maskpoint (explicit): checkpoint ${outcome.checkpointRejection}; falling back to masked history`)
     }
     const { stats } = outcome
-    this.ctx.logger.info(
+    this.infoLog(
       `maskpoint (explicit): strategy mask, ${stats.observationsMasked} observations masked, ` +
         `${stats.charsOmitted} chars omitted, candidate ~${stats.candidateTokens} tokens, no checkpoint`,
     )

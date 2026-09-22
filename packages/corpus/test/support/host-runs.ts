@@ -1,5 +1,4 @@
-import { DEFAULT_BUDGET } from '@maskpoint/core'
-import type { ConversationSnapshot, Stats } from '@maskpoint/core'
+import { budgetOf, DEFAULT_ENGINE_CONFIG, type ConversationSnapshot, type Stats } from '@maskpoint/core'
 import { planCompaction, type PiContext } from '@maskpoint/pi'
 import MaskpointCompactionEngine from '@maskpoint/dsh'
 import { buildDshMessages } from './dsh-encoding.js'
@@ -72,11 +71,14 @@ const FAKE_RESOLVED_CONFIG = {
 /**
  * Drives the DSH adapter's real, exported `summarize()` over a synthetic region, the same method
  * the host's compaction transaction calls. It reads `this.ctx.logger`, `this.ctx.llm`, `this.budget`,
- * and `this.config`, plus `agent.session.requestHeader()` and `agent.options`, so it is called
- * unbound against a minimal fake engine and a minimal fake `Agent` instead of a full cordis host
- * (dsh's own conformance suite, `packages/dsh/test/`, is what exercises the surrounding transaction).
- * No route is ever configured on the fake agent, so `resolveSummarizer` always yields no route and
- * a checkpoint call is never actually made — the same zero-LLM masking path `fakePiContext` targets.
+ * `this.config` (the host's own `ResolvedConfig`), (issue #8) `this.maskpointConfig`, and calls
+ * `this.infoLog` (a private instance method, restated on the fake since nothing here goes through
+ * `new`), plus `agent.session.requestHeader()` and `agent.options` — so it is called unbound against
+ * a minimal fake engine carrying all of those and a minimal fake `Agent`, instead of a full cordis
+ * host (dsh's own conformance suite, `packages/dsh/test/`, is what exercises the surrounding
+ * transaction). No route is ever configured on the fake agent, so `resolveSummarizer` always yields
+ * no route and a checkpoint call is never actually made — the same zero-LLM masking path
+ * `fakePiContext` targets.
  */
 export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
   const input = buildDshMessages(snapshot)
@@ -86,8 +88,15 @@ export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
       logger: { info: (message: string) => info.push(message), warn: () => {} },
       llm: { stream: () => Promise.reject(new Error('host-runs: no checkpoint call is expected in this harness')) },
     },
-    budget: DEFAULT_BUDGET,
+    maskpointConfig: DEFAULT_ENGINE_CONFIG,
+    budget: budgetOf(DEFAULT_ENGINE_CONFIG),
     config: FAKE_RESOLVED_CONFIG,
+    // `summarize()` calls `this.infoLog` (issue #8's notification-level gate), a private instance
+    // method that only exists on a real `MaskpointCompactionEngine` — restated here since this
+    // harness calls `summarize` unbound against a plain object, never through `new`.
+    infoLog(message: string) {
+      if (this.maskpointConfig.notificationLevel !== 'silent') this.ctx.logger.info(message)
+    },
   }
   const fakeAgent = { session: { requestHeader: () => undefined }, options: {} }
   const summarize = (MaskpointCompactionEngine.prototype as unknown as { summarize: (...args: unknown[]) => Promise<{ summary: { type: string; text?: string }[] }> }).summarize

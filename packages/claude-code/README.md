@@ -92,6 +92,38 @@ before this is written, so nothing here is a second copy of raw tool output. A s
 `audit.jsonl` in the same directory holds one line per `PostCompact` fidelity record; neither file
 ever contains an observation body, a credential, or an environment dump.
 
+## Configuration
+
+Settings live in Claude Code's own `settings.json`, not a new file: a `maskpoint` field, read
+directly off disk rather than through the host's already-merged environment. Global
+`~/.claude/settings.json`; project `.claude/settings.json`, overridden field-by-field by
+`.claude/settings.local.json`. The project layer always applies here — a hook only runs after the
+host's own directory-trust dialog has already been accepted for that project, so the trust gate
+Maskpoint's config rule exists to enforce (docs/design.md, Security and privacy) has already run by
+the time this code does.
+
+```json
+{
+  "maskpoint": {
+    "enabled": true,
+    "checkpointTriggerTokens": 12000,
+    "notificationLevel": "normal"
+  }
+}
+```
+
+- `enabled: false` makes `PreCompact` a pure no-op: no transcript read, no state written, no steering
+  line — nothing for `SessionStart` or `PostCompact` to find on a later hook invocation either.
+- `checkpointTriggerTokens` is the budget `decide()` compares the masked-history candidate against;
+  lowering it flips `overBudget` from `false` to `true` in the persisted `details` and in the log line
+  sooner. This adapter has no checkpoint call yet, so it never triggers one — see "Not yet" below.
+- `checkpointModel` is accepted and validated, but unused: there is nothing to point it at until this
+  adapter makes a model call of its own.
+- `notificationLevel: "silent"` suppresses the routine `PreCompact`/`SessionStart`/`PostCompact` log
+  lines; a decline is never suppressed.
+- An invalid value (wrong type, out of range, an unrecognized key) warns to the adapter's own log and
+  falls back to the documented default; it never fails the hook.
+
 ## When it steps aside
 
 A pre-compaction run degrades to a silent no-op — no state written, no injection later — rather than

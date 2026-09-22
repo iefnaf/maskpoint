@@ -1,4 +1,6 @@
+import { budgetOf, type NotificationLevel } from '@maskpoint/core'
 import { planCompaction, type PiEffect, toPiResult } from './compact.js'
+import { loadConfig } from './config.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from './host.js'
 
 /** One line saying what happened, in the statistics' own words. Structure and counts only, never content. */
@@ -17,8 +19,10 @@ function announcement(effect: PiEffect): string {
   return `${masked}, no model call.`
 }
 
-function report(ctx: PiContext, effect: PiEffect): void {
+/** A decline always surfaces (it is the "something didn't happen" case); routine results respect `notificationLevel`. */
+function report(ctx: PiContext, effect: PiEffect, notificationLevel: NotificationLevel): void {
   if (!ctx.hasUI) return
+  if (effect.kind !== 'decline' && notificationLevel === 'silent') return
   try {
     ctx.ui.notify(announcement(effect), effect.kind === 'decline' ? 'warning' : 'info')
   } catch {
@@ -36,8 +40,22 @@ export default function maskpoint(pi: PiExtensionApi): void {
   pi.on('session_before_compact', async (event: PiBeforeCompactEvent, ctx: PiContext): Promise<PiCompactionResult | undefined> => {
     // A compaction that was cancelled before it reached us has nothing to gain from our work.
     if (event.signal?.aborted) return undefined
-    const effect = await planCompaction(event, ctx)
-    report(ctx, effect)
+    const config = loadConfig(ctx, (message) => {
+      if (ctx.hasUI) {
+        try {
+          ctx.ui.notify(`Maskpoint ${message}`, 'warning')
+        } catch {
+          // A courtesy, never a reason to fail the compaction.
+        }
+      }
+    })
+    // Disabled: return nothing, exactly the documented fallback, so Pi's own compactor runs with no
+    // trace of Maskpoint in the result (docs/spec.md, Configuration — "disable Maskpoint...").
+    if (!config.enabled) return undefined
+
+    const budget = budgetOf(config)
+    const effect = await planCompaction(event, ctx, { budget })
+    report(ctx, effect, config.notificationLevel)
     return effect.kind === 'native' ? toPiResult(effect) : undefined
   })
 }
