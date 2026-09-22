@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { EngineDetail } from '@maskpoint/core'
-import { appendAudit, defaultStateDir, readState, statePathFor, writeState } from '../src/state.js'
+import { appendAudit, defaultStateDir, readAudit, readState, statePathFor, writeState } from '../src/state.js'
 
 const roots: string[] = []
 afterEach(() => {
@@ -38,7 +38,7 @@ describe('defaultStateDir', () => {
 describe('writeState / readState', () => {
   it('round-trips what it wrote', () => {
     const dir = tmpDir()
-    const state = { v: 1 as const, sessionId: 's1', detail: DETAIL, checkpointText: 'Recorded user message\nfixed the bug', updatedAt: 'now' }
+    const state = { v: 1 as const, sessionId: 's1', detail: DETAIL, checkpointText: 'Recorded user message\nfixed the bug', steered: true, updatedAt: 'now' }
     writeState(dir, state)
     expect(readState(dir, 's1')).toEqual(state)
   })
@@ -102,5 +102,45 @@ describe('appendAudit', () => {
   it('does not throw when the directory cannot be created', () => {
     // A path with a null byte is invalid on every platform's filesystem.
     expect(() => appendAudit('/nope\0/state', { v: 1, sessionId: 's1', at: 't', artifactChars: 0, hostSummaryChars: 0, salientTerms: 0, coveredTerms: 0, coverage: 0 })).not.toThrow()
+  })
+
+  it('records whether the steering channel was active alongside the drift metric', () => {
+    const dir = tmpDir()
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't1', artifactChars: 10, hostSummaryChars: 5, salientTerms: 1, coveredTerms: 1, coverage: 1, steered: true })
+    const [line] = readFileSync(join(dir, 'audit.jsonl'), 'utf8').trim().split('\n')
+    expect(JSON.parse(line!)).toMatchObject({ steered: true })
+  })
+})
+
+describe('readAudit', () => {
+  it('returns every record appendAudit wrote, in order', () => {
+    const dir = tmpDir()
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't1', artifactChars: 100, hostSummaryChars: 50, salientTerms: 4, coveredTerms: 2, coverage: 0.5, steered: true })
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't2', artifactChars: 120, hostSummaryChars: 60, salientTerms: 5, coveredTerms: 5, coverage: 1, steered: false })
+    expect(readAudit(dir)).toEqual([
+      { v: 1, sessionId: 's1', at: 't1', artifactChars: 100, hostSummaryChars: 50, salientTerms: 4, coveredTerms: 2, coverage: 0.5, steered: true },
+      { v: 1, sessionId: 's1', at: 't2', artifactChars: 120, hostSummaryChars: 60, salientTerms: 5, coveredTerms: 5, coverage: 1, steered: false },
+    ])
+  })
+
+  it('returns an empty array when no audit log exists yet', () => {
+    expect(readAudit(tmpDir())).toEqual([])
+  })
+
+  it('skips a malformed line rather than failing the whole read', () => {
+    const dir = tmpDir()
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't1', artifactChars: 1, hostSummaryChars: 1, salientTerms: 1, coveredTerms: 1, coverage: 1 })
+    appendFileSync(join(dir, 'audit.jsonl'), 'not json at all {{{\n')
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't2', artifactChars: 2, hostSummaryChars: 2, salientTerms: 2, coveredTerms: 1, coverage: 0.5 })
+    const records = readAudit(dir)
+    expect(records).toHaveLength(2)
+    expect(records.map((r) => r.at)).toEqual(['t1', 't2'])
+  })
+
+  it('skips a line with a wrong-typed field rather than trusting it into summarizeAudit\'s arithmetic', () => {
+    const dir = tmpDir()
+    appendFileSync(join(dir, 'audit.jsonl'), `${JSON.stringify({ v: 1, sessionId: 's1', at: 't1', artifactChars: 1, hostSummaryChars: 1, salientTerms: 1, coveredTerms: 1, coverage: 'not-a-number' })}\n`)
+    appendAudit(dir, { v: 1, sessionId: 's1', at: 't2', artifactChars: 2, hostSummaryChars: 2, salientTerms: 2, coveredTerms: 1, coverage: 0.5 })
+    expect(readAudit(dir).map((r) => r.at)).toEqual(['t2'])
   })
 })

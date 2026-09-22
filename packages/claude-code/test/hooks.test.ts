@@ -23,7 +23,23 @@ describe('the pre-compact hook', () => {
 
     expect(stdout).toContain('Maskpoint')
     expect(Object.keys(s.stateFiles())).toEqual(['sess-0001.json'])
-    expect(s.logs.at(-1)).toContain('assisted')
+    expect(s.logs.some((line) => line.includes('assisted'))).toBe(true)
+  })
+
+  it('records that the steering channel was active, in both the persisted state and the log', () => {
+    const s = scenario({ steering: true })
+    s.writeTranscript(SESSION)
+    s.preCompact()
+    expect(JSON.parse(s.stateFile('sess-0001.json'))).toMatchObject({ steered: true })
+    expect(s.logs.some((line) => /steering channel.*active/i.test(line))).toBe(true)
+  })
+
+  it('records that the steering channel was inactive, in both the persisted state and the log, when disabled', () => {
+    const s = scenario({ steering: false })
+    s.writeTranscript(SESSION)
+    s.preCompact()
+    expect(JSON.parse(s.stateFile('sess-0001.json'))).toMatchObject({ steered: false })
+    expect(s.logs.some((line) => /steering channel.*inactive/i.test(line))).toBe(true)
   })
 
   it('writes state at owner-only permissions, under the configured state directory', () => {
@@ -93,7 +109,7 @@ describe('configuration (issue #8)', () => {
     const over = scenario({ config: { checkpointTriggerTokens: 1 } })
     over.writeTranscript(SESSION)
     over.preCompact()
-    expect(over.logs.at(-1)).toContain('over budget')
+    expect(over.logs.some((line) => line.includes('over budget'))).toBe(true)
   })
 
   it('suppresses the routine "assisted" log line at notificationLevel "silent", without affecting the artifact', () => {
@@ -182,8 +198,9 @@ describe('the post-compact hook (audit)', () => {
     expect(stdout).toBe('')
     const audit = readFileSync(join(s.stateDir, 'audit.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line))
     expect(audit).toHaveLength(1)
-    expect(audit[0]).toMatchObject({ sessionId: 'sess-0001' })
+    expect(audit[0]).toMatchObject({ sessionId: 'sess-0001', steered: true })
     expect(s.logs.at(-1)).toContain('coverage')
+    expect(s.logs.at(-1)).toMatch(/steering (on|off)/)
   })
 
   it('is a silent no-op when nothing was persisted to audit against', () => {

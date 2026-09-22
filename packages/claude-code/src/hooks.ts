@@ -67,12 +67,18 @@ function preCompact(payload: Rec, ports: HookPorts): HookResult {
     sessionId,
     detail: effect.detail,
     checkpointText: effect.checkpointText,
+    steered: ports.steering,
     updatedAt: ports.now().toISOString(),
   })
   if (ports.config.notificationLevel !== 'silent') {
     const { observationsMasked, charsOmitted } = effect.detail.stats
     const flags = [effect.overBudget && 'over budget', effect.focusRequested && 'focus requested'].filter(Boolean).join(', ')
     ports.log(`maskpoint: assisted (masked ${observationsMasked} observations, ${charsOmitted} chars omitted${flags === '' ? '' : `, ${flags}`})`)
+    // Feature-detection of this undocumented channel is bounded by what a single hook invocation can
+    // know: whether it was attempted here. Recording it explicitly, every time, is what lets the
+    // channel's disappearance show up in the audit trail instead of reading as merely low coverage
+    // (docs/design.md, Open issue 7).
+    ports.log(`maskpoint: steering channel ${ports.steering ? 'active' : 'inactive (disabled)'}`)
   }
 
   // Never blocking, never JSON: this stdout is the undocumented steering channel, not the
@@ -110,10 +116,13 @@ function postCompact(payload: Rec, ports: HookPorts): HookResult {
   if (prior === undefined) return { stdout: '', exitCode: 0 }
 
   const hostSummary = typeof payload.compact_summary === 'string' ? payload.compact_summary : ''
+  // Local, synchronous, no model or network call: bounded by the artifact and summary's own size, so
+  // this cannot delay the user's next turn (docs/design.md, Claude Code scenario).
   const drift = auditDrift(prior.checkpointText, hostSummary)
-  appendAudit(ports.stateDir, { v: 1, sessionId, at: ports.now().toISOString(), ...drift })
+  appendAudit(ports.stateDir, { v: 1, sessionId, at: ports.now().toISOString(), ...drift, ...(prior.steered === undefined ? {} : { steered: prior.steered }) })
   if (ports.config.notificationLevel !== 'silent') {
-    ports.log(`maskpoint: audit coverage ${Math.round(drift.coverage * 100)}% (${drift.coveredTerms}/${drift.salientTerms} terms)`)
+    const steeredNote = prior.steered === undefined ? '' : `, steering ${prior.steered ? 'on' : 'off'}`
+    ports.log(`maskpoint: audit coverage ${Math.round(drift.coverage * 100)}% (${drift.coveredTerms}/${drift.salientTerms} terms${steeredNote})`)
   }
   return { stdout: '', exitCode: 0 }
 }
