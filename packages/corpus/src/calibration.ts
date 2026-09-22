@@ -8,11 +8,12 @@ import { boundaryIndex, representedThroughIndex } from './items.js'
 /**
  * DSH's own token meter (docs/design.md, Open issues #5: "compare estimates against host-provided
  * meters"). `estimateMessage` prices one message under DSH's fixed heuristic and, unlike
- * `measure()`, touches no session state -- `this` never appears in its body (confirmed against
- * `@deepseek-ai/dsh-token-meter`'s compiled source: the instance method is a bare delegate to a
- * module-scope pure function) -- so it is called unbound rather than through a full
- * `ctx.plugin(TokenMeter)` registration. No cordis host is available here, the same reason
- * `test/support/host-runs.ts` calls DSH's `summarize` unbound against a minimal fake.
+ * `measure()`, touches no session state at all -- confirmed against `@deepseek-ai/dsh-token-meter`'s
+ * compiled source, the instance method's body is a bare delegate to a module-scope pure function
+ * that never reads `this`. Unlike `test/support/host-runs.ts`'s unbound call to DSH's `summarize`
+ * (which *does* need a constructed fake `this`, because `summarize` reads instance state), no
+ * receiver is needed here at all -- `TokenMeter.prototype.estimateMessage` can just be called
+ * directly, without a `ctx.plugin(TokenMeter)` registration or any cordis host.
  */
 const priceMessage = TokenMeter.prototype.estimateMessage
 

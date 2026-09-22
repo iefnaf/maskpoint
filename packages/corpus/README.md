@@ -15,7 +15,7 @@ every fixture for both native-replacement adapters — see `docs/design.md`, "Te
   labels); the tests require the corpus to cover the shapes the design lists.
 - `src/replay.ts` — prints masked history and statistics for a fixture.
 - `src/calibration.ts` — compares the internal estimator against DSH's own token meter (issue #16).
-- `src/qualitybars.ts` — reports the design's quality bars (zero-LLM ratio, usable-result rate,
+- `src/quality-bars.ts` — reports the design's quality bars (zero-LLM ratio, usable-result rate,
   context-decrease, checkpoint safety) over the corpus (issue #16).
 
 ## Commands
@@ -58,8 +58,8 @@ test's `EXCLUDED` map (checked by a test of its own) plus a dedicated pair of te
 current, documented divergence — never a silent skip. See `docs/design.md`, "Testing design",
 "As built (#12)".
 
-`test/calibration.test.ts` and `test/qualitybars.test.ts` cover `src/calibration.ts` and
-`src/qualitybars.ts` (issue #16). See [`docs/calibration-report.md`](../../docs/calibration-report.md)
+`test/calibration.test.ts` and `test/quality-bars.test.ts` cover `src/calibration.ts` and
+`src/quality-bars.ts` (issue #16). See [`docs/calibration-report.md`](../../docs/calibration-report.md)
 for the numbers they produce over the current corpus and how to read them.
 
 ## Adding a fixture

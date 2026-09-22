@@ -1,6 +1,6 @@
 # Calibration and quality-bar report
 
-**Status:** done · **Work anchor:** issue #16 · **Canonical detail:** [`docs/design.md`](design.md), "Quality bars and measurement" and Open issues #5 · **Evidence code:** `packages/corpus/src/calibration.ts`, `packages/corpus/src/qualitybars.ts`, rerunnable via `npx tsx packages/corpus/src/cli.ts calibration` and `... quality-bars`
+**Status:** done · **Work anchor:** issue #16 · **Canonical detail:** [`docs/design.md`](design.md), "Quality bars and measurement" and Open issues #5 · **Evidence code:** `packages/corpus/src/calibration.ts`, `packages/corpus/src/quality-bars.ts`, rerunnable via `npx tsx packages/corpus/src/cli.ts calibration` and `... quality-bars`
 
 ## Scope and an honest limit up front
 
@@ -14,7 +14,7 @@ This mirrors how issue #14 (Claude Code drift audit) closed the same kind of acc
 
 DSH ships a real, importable token meter (`@deepseek-ai/dsh-token-meter`), independent of Maskpoint, used to gate the host's own compaction. Its `estimateMessage(message)` is a pure function — no session or cordis context touches it (confirmed against the compiled source: the instance method is a bare delegate to a module-scope function) — so it is called directly against the same message shapes `packages/corpus/src/dsh-encoding.ts` already builds for the parity harness. That gives a real, offline, CI-runnable comparison against an actual host, not a stand-in.
 
-The comparison prices the **same raw region on both sides**: the items a compaction would evict, before masking. The first attempt at this compared the internal estimator's *post-mask* candidate size (placeholders already substituted) against DSH's *pre-mask* reading of the raw region — which mostly measures how aggressively masking shrinks content, a question the existing `charsOmitted`/`observationsMasked` stats already answer, not whether `estimateTokens`'s per-character weighting is accurate. Comparing both sides on the identical raw region isolates the actual question this issue asks.
+The comparison prices the **same raw region on both sides**: the items a compaction would evict, before masking. The first attempt at this compared the internal estimator's *post-mask* candidate size (placeholders already substituted) against DSH's *pre-mask* reading of the raw region — which mostly measures how aggressively masking shrinks content, a question the existing `charsOmitted`/`observationsMasked` stats already answer, not whether `estimateTokens`'s per-character weighting is accurate. Comparing both sides on the identical raw region is closer to the actual question this issue asks, but it is not a pure per-character comparison either: `candidateTokens` (the internal side, via `candidateText`) prepends `HISTORY_FRAMING` (a fixed 58-token block) and a short `roleLabel` per item, while `buildDshMessages`/DSH's meter adds its own, different fixed cost per message (4 tokens of role overhead + 4 tokens of block overhead each, `estimate.ts`'s `ROLE_OVERHEAD`/`BLOCK_OVERHEAD`). Both are real costs each system actually carries in production, so the headline numbers below are honest "what each system would really compute" figures — but they are **not** isolated per-character-weighting numbers, and the Verification subsection below checks how much of the gap survives once both sides' framing/overhead is stripped out.
 
 ### Results
 
@@ -40,6 +40,24 @@ Two distinct patterns, not one:
 - **The `cjk` fixture: the internal estimator reads roughly double DSH's own meter.** This is expected and, on the evidence, correct to keep: DSH's own package documentation says plainly that its fixed 4-characters-per-token heuristic "underprice[s] badly" on CJK text. Maskpoint's estimator prices CJK at 6 quarter-tokens per character (1.5 tokens/char) against DSH's flat 4 chars/token (0.25 tokens/char) — six times the per-character cost, which is what produces the ~101% divergence. That direction is the safe one: a real BPE tokenizer typically prices CJK far worse than 4 chars/token, so pricing it *higher* than a heuristic that is known to underprice it is corrective, not an error to fix.
 
 No fixture shows the internal estimator reading *lower* than DSH's meter, which is the direction that would actually be dangerous (an under-conservative estimate risking a missed no-size-reduction guard or a checkpoint budget decision made on too small a number).
+
+### Verification: does the gap survive stripping framing?
+
+Redone with `HISTORY_FRAMING`/`roleLabel` removed from the internal side (summing `estimateTokens(payloadOf(item))` per item directly) and DSH's own per-message/per-block overhead removed from the host side (character-count-only pricing) — the smallest, most framing-sensitive fixture first:
+
+| Fixture | Estimator, no framing | DSH meter, char-only | Divergence |
+|---|---:|---:|---:|
+| parallel-tool-calls | 264 | 238 | −10.9% |
+| image-observations | 200 | 203 | +1.5% |
+| pre-masked | 214 | 199 | −7.5% |
+| host-context | 802 | 692 | −15.9% |
+| text-observations | 737 | 629 | −17.2% |
+| shell-execution | 706 | 600 | −17.7% |
+| split-turn | 852 | 718 | −18.7% |
+| code-heavy | 3733 | 3105 | −20.2% |
+| **cjk** | 475 | 202 | **−135.1%** |
+
+Framing accounted for a real slice of the headline numbers — `parallel-tool-calls` drops from −18.2% to −10.9%, and `image-observations` flips from −7.6% to +1.5% (i.e. DSH's char-only reading is marginally *higher* there once neither side's overhead is counted, on a fixture whose evicted text is otherwise almost empty) — but it does not explain the pattern away. On 7 of 9 fixtures the internal estimator still reads meaningfully higher (roughly 11–20%) than DSH's own character-level pricing, and the CJK gap *widens* to −135% once DSH's already-small per-message overhead is no longer partially offsetting it. The two headline conclusions in the Interpretation above — stable, moderate conservatism on non-CJK content; large, corrective conservatism on CJK — hold under this stricter, overhead-free test. `image-observations` is the one fixture where removing overhead erases the gap; see §3 (Context-decrease) for why that fixture's numbers are unusual for an unrelated, already-documented reason (the estimator does not price images at all).
 
 ### Constants: not adjusted
 

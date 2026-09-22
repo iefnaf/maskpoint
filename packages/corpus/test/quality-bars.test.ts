@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadCorpus } from '../src/corpus.js'
-import { checkpointSafetyOverCorpus, contextDecreaseViolations, usageOverCorpus } from '../src/qualitybars.js'
+import { checkpointSafetyOverCorpus, contextDecreaseViolations, usageOverCorpus } from '../src/quality-bars.js'
 
 const corpus = loadCorpus()
 

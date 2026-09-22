@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { calibrateCorpus } from './calibration.js'
 import { corpusDir, loadCorpus } from './corpus.js'
-import { checkpointSafetyOverCorpus, contextDecreaseViolations, usageOverCorpus } from './qualitybars.js'
+import { checkpointSafetyOverCorpus, contextDecreaseViolations, usageOverCorpus } from './quality-bars.js'
 import { maskingEngine, replay } from './replay.js'
 import { checkSanitized } from './sanitize.js'
 
