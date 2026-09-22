@@ -1,0 +1,31 @@
+{
+  "name": "@maskpoint/codex",
+  "version": "0.0.0",
+  "description": "Maskpoint for Codex CLI: pushes preservation instructions into Codex's own compaction prompt where its configuration allows, and re-injects a masked-history artifact after compaction. Assisted augmentation, never replacement.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "maskpoint-codex": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./hooks/hooks.json": "./hooks/hooks.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    ".codex-plugin",
+    "README.md"
+  ],
+  "dependencies": {
+    "@maskpoint/core": "0.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
