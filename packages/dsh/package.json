@@ -1,7 +1,14 @@
 {
   "name": "@maskpoint/dsh",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Maskpoint as a DSH compaction backend: observation masking behind the host's compaction seam.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iefnaf/maskpoint.git",
+    "directory": "packages/dsh"
+  },
+  "bugs": "https://github.com/iefnaf/maskpoint/issues",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,11 +29,14 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "scripts": {
+    "prepack": "tsc -p ../core/tsconfig.build.json && tsc -p tsconfig.build.json"
+  },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@maskpoint/core": "0.0.0"
+    "@maskpoint/core": "^0.1.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -44,6 +54,9 @@
     "@deepseek-ai/dsh-compaction-tool-result-pruner": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

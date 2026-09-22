@@ -1,7 +1,14 @@
 {
   "name": "@maskpoint/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Platform-free vocabulary and engine for Maskpoint. No host SDK, no I/O.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iefnaf/maskpoint.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/iefnaf/maskpoint/issues",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,5 +26,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

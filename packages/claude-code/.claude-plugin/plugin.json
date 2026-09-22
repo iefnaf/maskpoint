@@ -1,5 +1,5 @@
 {
   "name": "maskpoint-claude-code",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Maskpoint: masks stale tool observations into placeholders before Claude Code compacts, and re-injects the artifact afterward. Assisted augmentation — the host's own compactor is not replaced."
 }
