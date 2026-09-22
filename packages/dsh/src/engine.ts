@@ -1,4 +1,4 @@
-import { type EngineConfig, run } from '@maskpoint/core'
+import { budgetOf, type EngineConfig, run } from '@maskpoint/core'
 import type { BudgetPolicy, CapabilityProfile } from '@maskpoint/core'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -67,7 +67,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     const { base, own } = splitDshConfig(config as Record<string, unknown> | undefined)
     super(ctx, base)
     this.maskpointConfig = resolveDshConfig(own, (message) => ctx.logger.warn(`maskpoint: config: ${message}`))
-    this.budget = { checkpointTriggerTokens: this.maskpointConfig.checkpointTriggerTokens }
+    this.budget = budgetOf(this.maskpointConfig)
   }
 
   /**

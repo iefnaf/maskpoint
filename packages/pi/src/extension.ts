@@ -1,4 +1,4 @@
-import type { NotificationLevel } from '@maskpoint/core'
+import { budgetOf, type NotificationLevel } from '@maskpoint/core'
 import { planCompaction, type PiEffect, toPiResult } from './compact.js'
 import { loadConfig } from './config.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from './host.js'
@@ -53,7 +53,7 @@ export default function maskpoint(pi: PiExtensionApi): void {
     // trace of Maskpoint in the result (docs/spec.md, Configuration — "disable Maskpoint...").
     if (!config.enabled) return undefined
 
-    const budget = { checkpointTriggerTokens: config.checkpointTriggerTokens }
+    const budget = budgetOf(config)
     const effect = await planCompaction(event, ctx, { budget })
     report(ctx, effect, config.notificationLevel)
     return effect.kind === 'native' ? toPiResult(effect) : undefined

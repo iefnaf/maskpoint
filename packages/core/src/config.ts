@@ -1,4 +1,5 @@
 import { DEFAULT_BUDGET } from './decide.js'
+import type { BudgetPolicy } from './vocabulary.js'
 
 /** How much a compaction logs. Adapters decide what each level actually suppresses. */
 export type NotificationLevel = 'silent' | 'normal' | 'verbose'
@@ -116,4 +117,9 @@ export function resolveEngineConfigLayer(raw: unknown, warn: (message: string) =
   const { config, warnings } = resolveEngineConfig({ global: raw, projectTrusted: false })
   for (const warning of warnings) warn(warning.message)
   return config
+}
+
+/** The `BudgetPolicy` an `EngineConfig` implies, so every adapter builds it the same way. */
+export function budgetOf(config: Pick<EngineConfig, 'checkpointTriggerTokens'>): BudgetPolicy {
+  return { checkpointTriggerTokens: config.checkpointTriggerTokens }
 }

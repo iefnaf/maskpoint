@@ -1,4 +1,4 @@
-import type { EngineConfig } from '@maskpoint/core'
+import { budgetOf, type EngineConfig } from '@maskpoint/core'
 import { auditDrift } from './audit.js'
 import { capabilities, planCompaction } from './compact.js'
 import { isRecord, type Rec } from './normalize.js'
@@ -54,7 +54,7 @@ function preCompact(payload: Rec, ports: HookPorts): HookResult {
   const customInstructions = str(payload.custom_instructions)
   const entries = readTranscript(transcriptPath)
   const prior = readState(ports.stateDir, sessionId)
-  const budget = { checkpointTriggerTokens: ports.config.checkpointTriggerTokens }
+  const budget = budgetOf(ports.config)
   const effect = planCompaction(entries, { trigger, ...(customInstructions === undefined ? {} : { customInstructions }) }, prior, budget)
 
   if (effect.kind === 'decline') {
