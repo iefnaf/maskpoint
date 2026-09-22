@@ -59,8 +59,9 @@ mask-only compaction:
 ```
 
 A compaction that ran a checkpoint has `"strategy": "checkpoint"` and a `checkpoints` count one
-higher than the previous compaction's. `fromHook` is `true`; `usage` on the compaction entry itself
-is not yet populated for a Maskpoint-run checkpoint. To look at one:
+higher than the previous compaction's. `fromHook` is `true`, and `usage` on the entry is the
+provider's own accounting for the checkpoint call — tokens and cost — handed back to Pi unchanged so
+its session totals count the summarization work. To look at one:
 
 ```sh
 jq -c 'select(.type=="compaction") | {fromHook, usage, details}' ~/.pi/agent/sessions/<project>/<session>.jsonl
@@ -89,18 +90,48 @@ note on why no checkpoint ran.
 
 ## Configuration
 
-`PiContext.config`, if Pi's runtime supplies it for an installed extension, is resolved as
-Maskpoint's settings — `enabled`, `checkpointTriggerTokens`, `checkpointModel`, `notificationLevel` —
-the same shape every adapter shares. This package can do no I/O of its own (its own test suite pins
-every source import to a relative module or `@maskpoint/core` — no `node:fs`, no host SDK), so unlike
-Claude Code and DSH it cannot read a config file directly; `ctx.config` is its only channel, and,
-like the rest of this package's Pi-facing types, it is written structurally rather than against
-documented behavior — verify against a real Pi release before relying on it. `enabled: false` skips
-compaction entirely, the same as Maskpoint not being installed: no notification, no compaction entry.
-Lowering `checkpointTriggerTokens` moves the same conversation from a masked-history result into a
-checkpoint. `notificationLevel: "silent"` suppresses the routine interactive notice; a decline still
-shows one. An invalid value warns through the UI (when there is one) and falls back to the default,
-rather than failing the compaction.
+Pi gives an extension no settings of its own: a real release supplies no `config` on the handler's
+context — only its own `{ enabled, reserveTokens, keepRecentTokens }` at `event.preparation.settings`
+— and unknown keys in `settings.json` are dropped before a hook ever sees them (issue #39). So
+Maskpoint reads three channels, lowest precedence first:
+
+1. **The host object** — `PiContext.config`, if a future Pi release ever supplies one. Kept first so
+   that day needs no change here.
+2. **The environment** — one variable per setting, for a preference you want on every run:
+
+   ```sh
+   export MASKPOINT_CHECKPOINT_TRIGGER_TOKENS=20000   # stop paying for checkpoint calls
+   export MASKPOINT_NOTIFICATION_LEVEL=silent         # quiet notices; a decline still shows
+   ```
+
+3. **This extension's CLI flags** — they appear in `pi --help` and win for the run they were typed on:
+
+   ```sh
+   pi --maskpoint-checkpoint-trigger-tokens 20000
+   pi --maskpoint-enabled false
+   ```
+
+| Setting | Environment | Flag | Default |
+|---|---|---|---|
+| `enabled` | `MASKPOINT_ENABLED` | `--maskpoint-enabled` | `true` |
+| `checkpointTriggerTokens` | `MASKPOINT_CHECKPOINT_TRIGGER_TOKENS` | `--maskpoint-checkpoint-trigger-tokens` | `12000` |
+| `checkpointModel` | `MASKPOINT_CHECKPOINT_MODEL` | `--maskpoint-checkpoint-model` | the session's model |
+| `notificationLevel` | `MASKPOINT_NOTIFICATION_LEVEL` | `--maskpoint-notification-level` | `normal` |
+
+Boolean and numeric values are read as text from both channels, where `true`/`false`, `1`/`0`, and a
+plain non-negative integer are the spellings that parse. Each field is validated on its own: an
+invalid value warns through the UI (when there is one) and leaves the next-more-authoritative layer,
+or the documented default, standing — never a failed compaction. With the settings in hand, the
+behaviour is as described above: raising `checkpointTriggerTokens` moves the same conversation from a
+checkpoint into a mask-only result with no model call, `enabled: false` skips compaction entirely
+(the same as not being installed: no notification, no compaction entry), and
+`notificationLevel: "silent"` suppresses the routine notice while a decline still shows one.
+
+This package reads no file and imports no host SDK — its own test suite pins every source import to a
+relative module or `@maskpoint/core` — so the channels above are the ones it can reach. Reading
+`.pi/settings.json` directly would break that rule and needs a trust decision (what may an untrusted
+repository influence), which is why it is not done; the repository's `docs/design.md` records the
+trade-off as R9.
 
 ## Not yet
 

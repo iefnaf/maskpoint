@@ -170,7 +170,7 @@ describe('real payloads through the extension', () => {
     ctx: ReturnType<typeof fakeContext> = fakeContext(),
   ): Promise<{ result: PiCompactionResult | undefined; ctx: ReturnType<typeof fakeContext> }> => {
     let handler: ((event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>) | undefined
-    maskpoint({ on: (_name, fn) => void (handler = fn) })
+    maskpoint({ on: (_name, fn) => void (handler = fn), registerFlag: () => undefined, getFlag: () => undefined })
     return { result: (await handler?.(event, ctx)) as PiCompactionResult | undefined, ctx }
   }
 

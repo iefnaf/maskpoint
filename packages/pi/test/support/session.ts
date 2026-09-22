@@ -1,4 +1,4 @@
-import type { PiAssistantMessage, PiBeforeCompactEvent, PiContext, PiModelRegistry, PiPreparation } from '../../src/host.js'
+import type { PiAssistantMessage, PiBeforeCompactEvent, PiContext, PiModelRegistry, PiPreparation, PiUsage } from '../../src/host.js'
 
 /**
  * Builders for Pi session entries and the `session_before_compact` event Pi derives from them.
@@ -172,9 +172,25 @@ export function beforeCompact(entries: readonly Entry[], keepFrom: string, optio
 export const bulky = (mark: string, lines = 40): string =>
   Array.from({ length: lines }, (_, i) => `${mark} line ${i + 1}: the quick brown fox jumps over the lazy dog`).join('\n')
 
+/**
+ * The provider's own usage for one reply, complete: Pi's totals add `usage.cost.total` to their own,
+ * so a usage this adapter forwards has to be the whole object, cost included.
+ */
+export function usageOf(input: number, output: number, overrides: Partial<PiUsage> = {}): PiUsage {
+  return {
+    input,
+    output,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: input + output,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    ...overrides,
+  }
+}
+
 /** A successful, non-streaming model reply: `stop`, the given text, and simple token usage. */
 export function modelReply(text: string, overrides: Partial<PiAssistantMessage> = {}): PiAssistantMessage {
-  return { content: [{ type: 'text', text }], usage: { input: 100, output: 40 }, stopReason: 'stop', ...overrides }
+  return { content: [{ type: 'text', text }], usage: usageOf(100, 40), stopReason: 'stop', ...overrides }
 }
 
 /**

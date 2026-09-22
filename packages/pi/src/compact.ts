@@ -15,7 +15,7 @@ import {
   run,
   type Usage,
 } from '@maskpoint/core'
-import type { PiAssistantMessage, PiBeforeCompactEvent, PiCompactionResult, PiContext } from './host.js'
+import type { PiAssistantMessage, PiBeforeCompactEvent, PiCompactionResult, PiContext, PiUsage } from './host.js'
 import { summaryRenderer } from './render.js'
 import { buildSnapshot, isDecline } from './snapshot.js'
 
@@ -43,8 +43,13 @@ export type PiEffect =
       boundary: { id: string }
       detail: EngineDetail
       tokensBefore: number
-      /** Present only when a checkpoint call produced this result. */
+      /** Present only when a checkpoint call produced this result: the engine's reduced view of its cost. */
       usage?: Usage
+      /**
+       * The provider's own `Usage` for that same call, kept whole because Pi's session totals add
+       * `usage.cost.total` and so need the object the provider produced, not a reduced copy.
+       */
+      piUsage?: PiUsage
       /** Set when a checkpoint was attempted and not accepted, so the caller can say why none ran. */
       checkpointRejection?: CheckpointRejection
     }
@@ -113,7 +118,12 @@ class NoModelConfigured extends Error {
  * round-tripped through the engine's host-agnostic `CancellationSignal`, so a real provider call
  * never receives a stand-in object dressed up as one.
  */
-async function completeWith(ctx: PiContext, request: ModelRequest, signal: AbortSignal | undefined): Promise<ModelResponse> {
+async function completeWith(
+  ctx: PiContext,
+  request: ModelRequest,
+  signal: AbortSignal | undefined,
+  record: (usage: PiUsage) => void,
+): Promise<ModelResponse> {
   const model = ctx.model
   if (model === undefined) throw new NoModelConfigured('no model is configured for this session')
   const reply = await ctx.modelRegistry.complete(
@@ -121,6 +131,8 @@ async function completeWith(ctx: PiContext, request: ModelRequest, signal: Abort
     { systemPrompt: request.instructions, messages: [{ role: 'user', content: request.input, timestamp: Date.now() }] },
     { maxTokens: request.maxOutputTokens, signal, cacheRetention: 'none', sessionId: request.routingId },
   )
+  // The engine gets tokens; Pi gets this object back untouched at the end of the run.
+  record(reply.usage)
   return {
     stopReason: stopReasonOf(reply.stopReason),
     text: textOf(reply.content),
@@ -128,9 +140,9 @@ async function completeWith(ctx: PiContext, request: ModelRequest, signal: Abort
   }
 }
 
-function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext): EngineDeps {
+function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext, record: (usage: PiUsage) => void): EngineDeps {
   return {
-    complete: (request) => completeWith(ctx, request, event.signal),
+    complete: (request) => completeWith(ctx, request, event.signal, record),
     newRoutingId: () => crypto.randomUUID(),
     signal: event.signal ?? { aborted: false },
     checkpoint: { maxOutputTokens: CHECKPOINT_MAX_OUTPUT_TOKENS },
@@ -141,7 +153,12 @@ async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetP
   const snapshot = buildSnapshot(event)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
 
-  const outcome = await run(snapshot, budget, buildDeps(event, ctx))
+  // Captured out of the one checkpoint call, if one is made: the engine's own `Usage` is
+  // deliberately host-free, and Pi needs the provider's fuller object back.
+  let piUsage: PiUsage | undefined
+  const outcome = await run(snapshot, budget, buildDeps(event, ctx, (usage) => {
+    piUsage = usage
+  }))
   if (outcome.kind === 'decline') return decline(outcome.reason)
 
   const summary = summaryRenderer.render(outcome.artifact)
@@ -157,6 +174,7 @@ async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetP
     detail: outcome.detail,
     tokensBefore: event.preparation.tokensBefore,
     ...(outcome.kind === 'checkpoint' && outcome.usage !== undefined ? { usage: outcome.usage } : {}),
+    ...(outcome.kind === 'checkpoint' && piUsage !== undefined ? { piUsage } : {}),
     ...(outcome.kind === 'masked-history' && outcome.checkpointRejection !== undefined
       ? { checkpointRejection: outcome.checkpointRejection }
       : {}),
@@ -187,6 +205,9 @@ export function toPiResult(effect: Extract<PiEffect, { kind: 'native' }>): PiCom
       firstKeptEntryId: effect.boundary.id,
       tokensBefore: effect.tokensBefore,
       details: effect.detail,
+      // Passed through exactly as the provider reported it: Pi adds `usage.cost.total` to its own
+      // totals, so a usage it cannot add up is worse than no usage at all.
+      ...(effect.piUsage === undefined ? {} : { usage: effect.piUsage }),
     },
   }
 }

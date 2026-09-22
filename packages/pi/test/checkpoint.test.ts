@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { planCompaction } from '../src/compact.js'
 import type { PiModelRegistry } from '../src/host.js'
 import { firstTurn, native } from './support/scenario.js'
-import { beforeCompact, fakeContext, modelReply } from './support/session.js'
+import { beforeCompact, fakeContext, modelReply, usageOf } from './support/session.js'
 
 describe('planCompaction — over budget, with a checkpoint available', () => {
   it('makes exactly one model call and returns the checkpoint it wrote', async () => {
@@ -30,13 +30,34 @@ describe('planCompaction — over budget, with a checkpoint available', () => {
     expect(sent?.messages[0]?.content).not.toContain('BODY-1')
   })
 
-  it('reports the checkpoint call usage', async () => {
-    const complete = vi.fn().mockResolvedValue(modelReply('a checkpoint', { usage: { input: 321, output: 65 } }))
+  it('reports the checkpoint call usage, and keeps the provider\'s own object to hand back to Pi', async () => {
+    const usage = usageOf(321, 65)
+    const complete = vi.fn().mockResolvedValue(modelReply('a checkpoint', { usage }))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
       await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
     )
     expect(effect.usage).toEqual({ inputTokens: 321, outputTokens: 65 })
+    // Identity, not equality: Pi adds `usage.cost.total` to its session totals, so it has to get
+    // back the object the provider produced rather than a copy this adapter assembled.
+    expect(effect.piUsage).toBe(usage)
+  })
+
+  it('carries no provider usage when no checkpoint call was made', async () => {
+    const effect = native(await planCompaction(beforeCompact(firstTurn(), 'u2'), fakeContext()))
+    expect(effect.detail.strategy).toBe('mask')
+    expect(effect.usage).toBeUndefined()
+    expect(effect.piUsage).toBeUndefined()
+  })
+
+  it('carries no provider usage when the checkpoint call was rejected', async () => {
+    const complete = vi.fn().mockResolvedValue(modelReply('cut off mid-', { stopReason: 'length' }))
+    const ctx = { ...fakeContext(), modelRegistry: { complete } }
+    const effect = native(
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+    )
+    expect(effect.checkpointRejection).toBe('truncated')
+    expect(effect.piUsage).toBeUndefined()
   })
 })
 

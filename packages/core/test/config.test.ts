@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_ENGINE_CONFIG, resolveEngineConfig, resolveEngineConfigLayer } from '../src/index.js'
+import { DEFAULT_ENGINE_CONFIG, resolveEngineConfig, resolveEngineConfigLayer, resolveEngineConfigLayers } from '../src/index.js'
 
 describe('resolveEngineConfig', () => {
   it('resolves the documented defaults when nothing is configured', () => {
@@ -96,6 +96,67 @@ describe('resolveEngineConfigLayer', () => {
     const config = resolveEngineConfigLayer(undefined, () => {
       throw new Error('should not warn')
     })
+    expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
+  })
+})
+
+describe('resolveEngineConfigLayers', () => {
+  it('lets each layer win over the ones before it, field by field', () => {
+    const config = resolveEngineConfigLayers(
+      [
+        { source: 'host', raw: { enabled: false, checkpointTriggerTokens: 8_000, notificationLevel: 'verbose' } },
+        { source: 'environment', raw: { checkpointTriggerTokens: 20_000 } },
+        { source: 'flag', raw: { notificationLevel: 'silent' } },
+      ],
+      () => {
+        throw new Error('should not warn')
+      },
+    )
+    expect(config).toEqual({ enabled: false, checkpointTriggerTokens: 20_000, notificationLevel: 'silent' })
+  })
+
+  it('names the layer in every warning, so the operator knows which surface to fix', () => {
+    const warned: string[] = []
+    const config = resolveEngineConfigLayers(
+      [
+        { source: 'host', raw: { unknownKey: 1 } },
+        { source: 'environment', raw: { checkpointTriggerTokens: 'lots' } },
+        { source: 'flag', raw: 'not an object' },
+      ],
+      (message) => warned.push(message),
+    )
+    expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
+    expect(warned).toEqual([
+      'unknown host configuration key "unknownKey" ignored',
+      'invalid environment value for "checkpointTriggerTokens" ("lots"); ignoring it',
+      'flag configuration must be an object; ignoring it',
+    ])
+  })
+
+  it('leaves an earlier valid value in place when a later layer is invalid', () => {
+    const warned: string[] = []
+    const config = resolveEngineConfigLayers(
+      [
+        { source: 'environment', raw: { checkpointTriggerTokens: 20_000 } },
+        { source: 'flag', raw: { checkpointTriggerTokens: 0 } },
+      ],
+      (message) => warned.push(message),
+    )
+    expect(config.checkpointTriggerTokens).toBe(20_000)
+    expect(warned).toEqual(['invalid flag value for "checkpointTriggerTokens" (0); ignoring it'])
+  })
+
+  it('warns about nothing when every layer is absent, which is a host that supplies no settings', () => {
+    const config = resolveEngineConfigLayers(
+      [
+        { source: 'host', raw: undefined },
+        { source: 'environment', raw: undefined },
+        { source: 'flag', raw: undefined },
+      ],
+      () => {
+        throw new Error('should not warn')
+      },
+    )
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
   })
 })

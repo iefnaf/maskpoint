@@ -107,16 +107,35 @@ export function resolveEngineConfig(input: { global?: unknown; project?: unknown
 }
 
 /**
- * `resolveEngineConfig` for a host that hands an adapter exactly one already-merged configuration
- * layer, with no way to tell a global setting from a project one (docs/design.md, DSH adapter —
- * cordis hands a plugin one resolved config object). Treated as the trusted `global` layer: the
- * value came from wherever the operator mounted this plugin, which is the same trust boundary as
- * installing it at all, never from an untrusted repository reachable independently of that.
+ * `resolveEngineConfig` for a host that hands an adapter already-merged configuration layers it
+ * cannot label as global or project. Later layers win, and each names itself in a warning, so an
+ * operator can tell which surface to go and fix (docs/design.md, Pi adapter — the host's own
+ * object, the process environment, and this extension's CLI flags).
+ *
+ * A layer that is absent (`undefined`) contributes nothing and warns about nothing: on a host that
+ * supplies no configuration for an extension at all, every one of its layers is simply missing.
+ */
+export function resolveEngineConfigLayers(
+  layers: readonly { source: string; raw: unknown }[],
+  warn: (message: string) => void,
+): EngineConfig {
+  const warnings: ConfigWarning[] = []
+  const resolved: { -readonly [K in keyof EngineConfig]?: EngineConfig[K] } = {}
+  for (const layer of layers) applyLayer(layer.raw, layer.source, resolved, warnings)
+  for (const warning of warnings) warn(warning.message)
+  return { ...DEFAULT_ENGINE_CONFIG, ...resolved }
+}
+
+/**
+ * `resolveEngineConfigLayers` for a host that hands an adapter exactly one already-merged
+ * configuration layer, with no way to tell a global setting from a project one (docs/design.md, DSH
+ * adapter — cordis hands a plugin one resolved config object). Treated as the trusted `global`
+ * layer: the value came from wherever the operator mounted this plugin, which is the same trust
+ * boundary as installing it at all, never from an untrusted repository reachable independently of
+ * that.
  */
 export function resolveEngineConfigLayer(raw: unknown, warn: (message: string) => void): EngineConfig {
-  const { config, warnings } = resolveEngineConfig({ global: raw, projectTrusted: false })
-  for (const warning of warnings) warn(warning.message)
-  return config
+  return resolveEngineConfigLayers([{ source: 'global', raw }], warn)
 }
 
 /** The `BudgetPolicy` an `EngineConfig` implies, so every adapter builds it the same way. */
