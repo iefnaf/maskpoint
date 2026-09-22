@@ -14,6 +14,12 @@ export interface PersistedState {
   sessionId: string
   detail: EngineDetail
   checkpointText: string
+  /**
+   * Whether the undocumented PreCompact steering line was emitted for this compaction. Optional so a
+   * file written before this field existed still reads back rather than being treated as foreign; the
+   * post-compaction audit records it as unknown (`steered: undefined`) rather than guessing.
+   */
+  steered?: boolean
   updatedAt: string
 }
 
@@ -87,6 +93,8 @@ export interface AuditRecord {
   salientTerms: number
   coveredTerms: number
   coverage: number
+  /** Whether the steering channel was active for the compaction this record measures; see `PersistedState.steered`. */
+  steered?: boolean
 }
 
 const auditFile = (stateDir: string): string => join(stateDir, 'audit.jsonl')
@@ -102,4 +110,40 @@ export function appendAudit(stateDir: string, record: AuditRecord): void {
   } catch {
     // Audit is observability, not correctness; losing one record is not worth surfacing.
   }
+}
+
+/** Whether a parsed value has every field `summarizeAudit` and its callers trust an `AuditRecord` to have. */
+function isAuditRecord(value: unknown): value is AuditRecord {
+  if (typeof value !== 'object' || value === null) return false
+  const r = value as Partial<AuditRecord>
+  if (r.v !== 1 || typeof r.sessionId !== 'string' || typeof r.at !== 'string') return false
+  if (typeof r.artifactChars !== 'number' || typeof r.hostSummaryChars !== 'number') return false
+  if (typeof r.salientTerms !== 'number' || typeof r.coveredTerms !== 'number' || typeof r.coverage !== 'number') return false
+  return r.steered === undefined || typeof r.steered === 'boolean'
+}
+
+/**
+ * Read every audit record persisted so far, e.g. for `summarizeAudit` to turn into real-session
+ * numbers. A malformed line (a partial write, a foreign format, a wrong-typed field) is skipped
+ * rather than failing the whole read; a missing file reads as no records, the same way `readState`
+ * treats a missing session.
+ */
+export function readAudit(stateDir: string): AuditRecord[] {
+  let raw: string
+  try {
+    raw = readFileSync(auditFile(stateDir), 'utf8')
+  } catch {
+    return []
+  }
+  const records: AuditRecord[] = []
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    try {
+      const record: unknown = JSON.parse(line)
+      if (isAuditRecord(record)) records.push(record)
+    } catch {
+      // Skip this line; one corrupt record must not take down the whole read.
+    }
+  }
+  return records
 }
