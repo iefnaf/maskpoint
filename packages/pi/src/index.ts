@@ -1,0 +1,6 @@
+export { capabilities, planCompaction, toPiResult } from './compact.js'
+export type { PiEffect } from './compact.js'
+export { summaryRenderer } from './render.js'
+export { buildSnapshot, isDecline } from './snapshot.js'
+export type { SnapshotDecline } from './snapshot.js'
+export type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi, PiPreparation } from './host.js'

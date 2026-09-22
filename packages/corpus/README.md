@@ -1,8 +1,9 @@
 # @maskpoint/corpus
 
 The shared, sanitized conversation corpus, plus the tooling around it. Private: test and
-development only. It drives Seam 1 (the engine over neutral snapshots) directly and, later,
-Seam 2 (adapter conformance) through per-host recordings — see `docs/design.md`, "Testing design".
+development only. It drives Seam 1 (the engine over neutral snapshots) directly, Seam 2 (adapter
+conformance) through per-host recordings, and cross-platform parity by synthetically encoding
+every fixture for both native-replacement adapters — see `docs/design.md`, "Testing design".
 
 ## Layout
 
@@ -42,6 +43,15 @@ request and answers with one scripted response (`responses.success`, `providerEr
 path: `run` over every fixture and the double, asserting the number and contract of model calls,
 acceptance, each rejection's fallback to masked history, cancellation, usage, and the next
 compaction building on an accepted checkpoint. No network.
+
+`test/parity.test.ts` is the cross-platform parity harness (issue #12): every fixture, synthetically
+encoded as the artifact each adapter's own boundary and cursor accounting expects
+(`test/support/pi-encoding.ts`, `test/support/dsh-encoding.ts`), driven through the Pi and DSH
+adapters' real exported entry points, and compared on outcome, statistics, and rendered
+masked-history text. A fixture is compared by default; excluding one needs a named reason in the
+test's `EXCLUDED` map (checked by a test of its own) plus a dedicated pair of tests pinning the
+current, documented divergence — never a silent skip. See `docs/design.md`, "Testing design",
+"As built (#12)".
 
 ## Adding a fixture
 

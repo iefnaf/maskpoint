@@ -4,7 +4,9 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
-      "@maskpoint/core": ["./packages/core/src/index.ts"]
+      "@maskpoint/core": ["./packages/core/src/index.ts"],
+      "@maskpoint/dsh": ["./packages/dsh/src/index.ts"],
+      "@maskpoint/pi": ["./packages/pi/src/index.ts"]
     }
   },
   "include": ["packages/*/src", "packages/*/test", "vitest.config.ts"]

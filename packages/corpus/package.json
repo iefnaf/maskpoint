@@ -7,6 +7,11 @@
   "dependencies": {
     "@maskpoint/core": "0.0.0"
   },
+  "devDependencies": {
+    "@maskpoint/dsh": "0.0.0",
+    "@maskpoint/pi": "0.0.0",
+    "@deepseek-ai/dsh-compaction": "0.1.0-rc.8"
+  },
   "engines": {
     "node": ">=22"
   }
