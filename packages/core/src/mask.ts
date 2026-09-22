@@ -2,7 +2,7 @@ import { estimateTokens } from './estimate.js'
 import type { Item, Stats, ToolResultItem } from './vocabulary.js'
 
 /** What masking measures. `candidateTokens` belongs to accumulation, which owns the candidate. */
-export type MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>
+export type MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'> & { reasoningsMasked?: number }
 
 /**
  * How masking is applied. The default follows the no-expansion rule.
@@ -15,6 +15,13 @@ export interface MaskOptions {
    * Empty bodies and existing placeholders are still left alone.
    */
   alwaysMask?: boolean
+  /**
+   * Mask assistant reasoning as well as observations. Off by default: the design promises
+   * reasoning verbatim, and the one measurement of the trade-off (`docs/reasoning-masking-evaluation.md`)
+   * found no cost to continuation but left the checkpoint path untested. Still subject to the
+   * no-expansion rule, so a short block of reasoning stays.
+   */
+  maskReasoning?: boolean
 }
 
 /** The snapshot cannot be masked as given. Adapters turn this into a decline, so the host compacts. */
@@ -27,6 +34,9 @@ export class MaskingError extends Error {
  * that merely begins this way is still an observation and must still be masked.
  */
 const PLACEHOLDER = /^\[tool result omitted: [^\]\n]*\]$/
+
+/** The same, for the line a masked reasoning block leaves behind. */
+const REASONING_PLACEHOLDER = /^\[reasoning omitted: [^\]\n]*\]$/
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
@@ -60,6 +70,24 @@ function placeholderFor(item: ToolResultItem, omitted: string | undefined, media
 
 const replaced = (item: ToolResultItem, text: string): ToolResultItem => ({ ...item, text, media: 0, masked: true })
 
+/** The line a masked reasoning block leaves behind: how much of it there was, never any of what it said. */
+function reasoningPlaceholder(text: string): string {
+  return `[reasoning omitted: ${plural(countLines(text), 'line')}, ${plural(countChars(text), 'char')}]`
+}
+
+/**
+ * The masked reasoning block and how many characters it dropped, or undefined to leave it alone.
+ * Same two rules as an observation: never expand, and never re-wrap what masking already produced.
+ */
+function maskReasoning(item: Item, options: MaskOptions): { item: Item; charsOmitted: number } | undefined {
+  if (options.maskReasoning !== true || item.kind !== 'assistant-reasoning') return undefined
+  const body = item.text ?? ''
+  if (body === '' || REASONING_PLACEHOLDER.test(body)) return undefined
+  const placeholder = reasoningPlaceholder(body)
+  if (estimateTokens(placeholder) >= estimateTokens(body)) return undefined
+  return { item: { ...item, text: placeholder }, charsOmitted: countChars(body) }
+}
+
 /** The masked observation and how many characters of text it dropped, or undefined to leave it alone. */
 function maskObservation(item: ToolResultItem, options: MaskOptions): { item: ToolResultItem; charsOmitted: number } | undefined {
   // Idempotence: a placeholder is already what masking makes. A host pruner's placeholder is
@@ -86,16 +114,18 @@ function maskObservation(item: ToolResultItem, options: MaskOptions): { item: To
 }
 
 /**
- * Mask every observation in `items`, leaving everything else intact. Pure: returns new items and
- * never mutates its input. Callers decide which span to pass; see `maskSpan` for the boundary rule.
+ * Mask every observation in `items`, leaving everything else intact — except assistant reasoning,
+ * which is masked too when the caller asked for it. Pure: returns new items and never mutates its
+ * input. Callers decide which span to pass; see `maskSpan` for the boundary rule.
  */
 export function maskItems(items: readonly Item[], options: MaskOptions = {}): { items: Item[]; stats: MaskStats } {
   const stats: MaskStats = { observationsMasked: 0, charsOmitted: 0 }
   const out = items.map((item): Item => {
-    if (item.kind !== 'tool-result') return item
-    const masked = maskObservation(item, options)
+    if (item.kind !== 'tool-result' && item.kind !== 'assistant-reasoning') return item
+    const masked = item.kind === 'tool-result' ? maskObservation(item, options) : maskReasoning(item, options)
     if (masked === undefined) return item
-    stats.observationsMasked++
+    if (item.kind === 'tool-result') stats.observationsMasked++
+    else stats.reasoningsMasked = (stats.reasoningsMasked ?? 0) + 1
     stats.charsOmitted += masked.charsOmitted
     return masked.item
   })

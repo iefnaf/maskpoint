@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
 import { firstTurn } from './support/scenario.js'
-import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, toolCall, toolResult, usageOf, user } from './support/session.js'
+import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, thinking, toolCall, toolResult, usageOf, user } from './support/session.js'
 
 type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>
 
@@ -46,6 +46,7 @@ describe('the extension', () => {
       'maskpoint-enabled',
       'maskpoint-checkpoint-trigger-tokens',
       'maskpoint-checkpoint-model',
+      'maskpoint-mask-reasoning',
       'maskpoint-notification-level',
     ])
   })
@@ -238,6 +239,48 @@ describe('configuration (issues #8 and #39)', () => {
   it('can be disabled from a flag, exactly as ctx.config can disable it', async () => {
     const result = await handler({ 'maskpoint-enabled': 'false' })(beforeCompact(firstTurn(), 'u2'), fakeContext())
     expect(result).toBeUndefined()
+  })
+})
+
+describe('masking assistant reasoning (issue #43)', () => {
+  const long = 'The parser is the likely culprit here. '.repeat(30)
+  const chat = () => [
+    user('u1', 'Fix the failing test.'),
+    assistant('a1', [thinking(long), text('Looking at the parser first.'), toolCall('call-1', 'read', { path: 'src/parser.ts' })]),
+    toolResult('r1', 'call-1', 'read', bulky('BODY-1')),
+    user('u2', 'Go on.'),
+    assistant('a2', [text('Continuing.')]),
+  ]
+
+  it('keeps reasoning verbatim by default, and records no reasoning count', async () => {
+    const result = await handler()(beforeCompact(chat(), 'u2'), fakeContext())
+    expect(result?.compaction.summary).toContain('The parser is the likely culprit here.')
+    expect((result?.compaction.details as { stats: Record<string, unknown> }).stats.reasoningsMasked).toBeUndefined()
+  })
+
+  it('replaces it with a placeholder when the flag asks, and counts it in the statistics', async () => {
+    const result = await handler({ 'maskpoint-mask-reasoning': 'true' })(beforeCompact(chat(), 'u2'), fakeContext())
+    expect(result?.compaction.summary).toContain('[reasoning omitted:')
+    expect(result?.compaction.summary).not.toContain('The parser is the likely culprit here.')
+    expect(result?.compaction.summary).toContain('Recorded assistant reasoning')
+    // The decisions themselves stay: assistant text and the tool call are untouched.
+    expect(result?.compaction.summary).toContain('Looking at the parser first.')
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask', stats: { reasoningsMasked: 1, observationsMasked: 1 } })
+  })
+
+  it('says reasoning was masked in the notice, and stays quiet about it when it was not', async () => {
+    const on = fakeContext()
+    await handler({ 'maskpoint-mask-reasoning': 'true' })(beforeCompact(chat(), 'u2'), on)
+    expect(on.notes[0]?.message).toMatch(/masked 1 observation and 1 reasoning block \(/)
+    const off = fakeContext()
+    await handler()(beforeCompact(chat(), 'u2'), off)
+    expect(off.notes[0]?.message).toMatch(/masked 1 observation \(/)
+  })
+
+  it('can be turned on from the environment as well, since both channels feed one resolve', async () => {
+    vi.stubEnv('MASKPOINT_MASK_REASONING', '1')
+    const result = await handler()(beforeCompact(chat(), 'u2'), fakeContext())
+    expect(result?.compaction.details).toMatchObject({ stats: { reasoningsMasked: 1 } })
   })
 })
 

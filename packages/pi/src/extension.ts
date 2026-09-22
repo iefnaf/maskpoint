@@ -1,4 +1,4 @@
-import { budgetOf, type NotificationLevel } from '@maskpoint/core'
+import { budgetOf, maskOptionsOf, type NotificationLevel } from '@maskpoint/core'
 import { planCompaction, type PiEffect, toPiResult } from './compact.js'
 import { flagSpecs, loadConfig, readFlags } from './config.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from './host.js'
@@ -9,9 +9,11 @@ function announcement(effect: PiEffect): string {
     const why = effect.note === undefined ? effect.reason : `${effect.reason}: ${effect.note}`
     return `Maskpoint declined (${why}); Pi's own compactor will run.`
   }
-  const { observationsMasked, charsOmitted, candidateTokens } = effect.detail.stats
-  const noun = observationsMasked === 1 ? 'observation' : 'observations'
-  const masked = `Maskpoint masked ${observationsMasked} ${noun} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept`
+  const { observationsMasked, reasoningsMasked, charsOmitted, candidateTokens } = effect.detail.stats
+  const observations = `${observationsMasked} ${observationsMasked === 1 ? 'observation' : 'observations'}`
+  const reasonings =
+    reasoningsMasked === undefined ? '' : ` and ${reasoningsMasked} ${reasoningsMasked === 1 ? 'reasoning block' : 'reasoning blocks'}`
+  const masked = `Maskpoint masked ${observations}${reasonings} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept`
   if (effect.detail.strategy === 'checkpoint') return `${masked}, condensed into a checkpoint with one model call.`
   if (effect.checkpointRejection !== undefined) {
     return `${masked}, no model call. A checkpoint was attempted (${effect.checkpointRejection}) and not accepted; masked history was kept instead.`
@@ -61,7 +63,7 @@ export default function maskpoint(pi: PiExtensionApi): void {
     if (!config.enabled) return undefined
 
     const budget = budgetOf(config)
-    const effect = await planCompaction(event, ctx, { budget })
+    const effect = await planCompaction(event, ctx, { budget, maskOptions: maskOptionsOf(config) })
     report(ctx, effect, config.notificationLevel)
     return effect.kind === 'native' ? toPiResult(effect) : undefined
   })

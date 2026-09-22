@@ -23,11 +23,17 @@ automatic threshold, and overflow recovery.
 
 ## What a compaction does
 
-- Everything before Pi's cut point is rendered as **masked history**: user messages, assistant text
-  and reasoning, and tool calls are kept word for word; each tool result becomes a placeholder such as
-  `[tool result omitted: read, ok, 72 lines, 2201 chars]`. A result is only masked if the placeholder
-  is smaller, images are always dropped, and a command you ran with `!` keeps the command and masks
-  its output.
+- Everything before Pi's cut point is rendered as **masked history**: user messages, assistant text,
+  assistant reasoning and tool calls are kept word for word; each tool result becomes a placeholder
+  such as `[tool result omitted: read, ok, 72 lines, 2201 chars]`. A result is only masked if the
+  placeholder is smaller, images are always dropped, and a command you ran with `!` keeps the command
+  and masks its output.
+- Assistant reasoning is kept by default and masked too when `maskReasoning` is set, becoming
+  `[reasoning omitted: 41 lines, 1203 chars]`. Reasoning is the part of a long session that exists
+  only in prose, so it is the operator's call rather than a silent default; the measurement behind
+  the trade-off is [`docs/reasoning-masking-evaluation.md`](../../docs/reasoning-masking-evaluation.md)
+  (no cost to continuation, better state recall, prompt tokens down to a third — checkpoint summary
+  quality untested, which is why the default is off).
 - Pi's cut point (`firstKeptEntryId`) is returned **exactly as Pi prepared it**. Maskpoint never
   chooses what Pi keeps.
 - The next compaction keeps the previous summary verbatim and appends only what has been evicted
@@ -116,6 +122,7 @@ Maskpoint reads three channels, lowest precedence first:
 | `enabled` | `MASKPOINT_ENABLED` | `--maskpoint-enabled` | `true` |
 | `checkpointTriggerTokens` | `MASKPOINT_CHECKPOINT_TRIGGER_TOKENS` | `--maskpoint-checkpoint-trigger-tokens` | `12000` |
 | `checkpointModel` | `MASKPOINT_CHECKPOINT_MODEL` | `--maskpoint-checkpoint-model` | the session's model |
+| `maskReasoning` | `MASKPOINT_MASK_REASONING` | `--maskpoint-mask-reasoning` | `false` |
 | `notificationLevel` | `MASKPOINT_NOTIFICATION_LEVEL` | `--maskpoint-notification-level` | `normal` |
 
 Boolean and numeric values are read as text from both channels, where `true`/`false`, `1`/`0`, and a
@@ -134,6 +141,11 @@ repository influence), which is why it is not done; the repository's `docs/desig
 trade-off as R9.
 
 ## Not yet
+
+`maskReasoning` has not been measured on the checkpoint path: when a compaction runs a checkpoint
+call, that call reads the same text the budget measured, so stubbing reasoning also stubs what the
+summarizer sees. Until a checkpoint written from stubbed reasoning is compared with one written from
+full reasoning, the default stays off.
 
 There is no per-checkpoint model configuration yet: a checkpoint always uses the session's active
 model, even when `checkpointModel` is set — it is accepted and validated, but nothing in Pi's

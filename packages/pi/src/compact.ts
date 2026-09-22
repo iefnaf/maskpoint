@@ -1,6 +1,7 @@
 import {
   type Artifact,
   type BudgetPolicy,
+  type MaskOptions,
   type CapabilityProfile,
   type CheckpointRejection,
   type ConversationSnapshot,
@@ -149,16 +150,21 @@ function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext, record: (usage: 
   }
 }
 
-async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetPolicy): Promise<PiEffect> {
+async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetPolicy, maskOptions: MaskOptions): Promise<PiEffect> {
   const snapshot = buildSnapshot(event)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
 
   // Captured out of the one checkpoint call, if one is made: the engine's own `Usage` is
   // deliberately host-free, and Pi needs the provider's fuller object back.
   let piUsage: PiUsage | undefined
-  const outcome = await run(snapshot, budget, buildDeps(event, ctx, (usage) => {
-    piUsage = usage
-  }))
+  const outcome = await run(
+    snapshot,
+    budget,
+    buildDeps(event, ctx, (usage) => {
+      piUsage = usage
+    }),
+    maskOptions,
+  )
   if (outcome.kind === 'decline') return decline(outcome.reason)
 
   const summary = summaryRenderer.render(outcome.artifact)
@@ -188,10 +194,10 @@ async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetP
 export async function planCompaction(
   event: PiBeforeCompactEvent,
   ctx: PiContext,
-  options: { budget?: BudgetPolicy } = {},
+  options: { budget?: BudgetPolicy; maskOptions?: MaskOptions } = {},
 ): Promise<PiEffect> {
   try {
-    return await plan(event, ctx, options.budget ?? DEFAULT_BUDGET)
+    return await plan(event, ctx, options.budget ?? DEFAULT_BUDGET, options.maskOptions ?? {})
   } catch (error) {
     return decline('engine-failure', error instanceof Error ? error.message : String(error))
   }

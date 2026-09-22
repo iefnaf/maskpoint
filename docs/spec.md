@@ -21,7 +21,7 @@ Maskpoint is a portable hybrid context-compaction engine plus one adapter per ho
 
 The engine implements a two-stage strategy over a platform-neutral conversation model:
 
-1. **Observation masking** (deterministic, zero LLM calls). Replace stale tool observations with compact, informative placeholders. Preserve user content, assistant text and reasoning, tool calls with arguments, and the host's own retained recent window verbatim.
+1. **Observation masking** (deterministic, zero LLM calls). Replace stale tool observations with compact, informative placeholders. Preserve user content, assistant text, tool calls with arguments, and the host's own retained recent window verbatim. Assistant reasoning is preserved too, unless the operator opts in to masking it as well (requirement 9, `maskReasoning` here and in the design's Configuration section).
 2. **Budgeted checkpoint** (LLM, last resort). Only when accumulated masked history exceeds a configured budget, or when the user explicitly requests summarization, condense that accumulated history into a structured state checkpoint.
 
 The engine never chooses the compaction cut point and never writes to a platform by itself. Adapters normalize the host's conversation into the engine's model, supply the retained boundary, invoke the engine, render the result in the host's vocabulary, and apply it through whatever integration depth the host permits.
@@ -48,7 +48,7 @@ Because the engine is shared, the same masking rules, budget policy, checkpoint 
 
 7. As a Pi or DSH user, I want stale tool observations replaced by placeholders, so that historical noise stops consuming context.
 8. As a coding-agent user, I want every user instruction inside the compacted span preserved verbatim, so that compaction cannot silently weaken my requirements.
-9. As a coding-agent user, I want assistant reasoning and explanatory text preserved verbatim on the masking path, so that the rationale behind the work survives.
+9. As a coding-agent user, I want assistant reasoning and explanatory text preserved verbatim on the masking path, so that the rationale behind the work survives; and I want to be able to trade that reasoning for context deliberately, by opting in to masking it as well, rather than having that choice made silently for me.
 10. As a coding-agent user, I want tool names and arguments preserved, so that the agent remembers which actions it attempted.
 11. As a coding-agent user, I want placeholders to name the tool, so that I can tell a masked file read from a masked test run.
 12. As a coding-agent user, I want placeholders to record success or error status, so that a masked failure is not mistaken for success.

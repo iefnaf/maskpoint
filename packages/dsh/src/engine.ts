@@ -1,4 +1,4 @@
-import { budgetOf, type EngineConfig, run } from '@maskpoint/core'
+import { budgetOf, type EngineConfig, type MaskOptions, maskOptionsOf, run } from '@maskpoint/core'
 import type { BudgetPolicy, CapabilityProfile } from '@maskpoint/core'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -62,12 +62,15 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
   readonly maskpointConfig: EngineConfig
   /** The checkpoint trigger, derived from `maskpointConfig`. A protected field, not a getter, so a test double can still override it directly. */
   protected readonly budget: BudgetPolicy
+  /** Mask behaviour derived from `maskpointConfig`: whether reasoning is masked as well as observations. */
+  protected readonly maskOptions: MaskOptions
 
   constructor(ctx: Context, config?: MaskpointDshConfig) {
     const { base, own } = splitDshConfig(config as Record<string, unknown> | undefined)
     super(ctx, base)
     this.maskpointConfig = resolveDshConfig(own, (message) => ctx.logger.warn(`maskpoint: config: ${message}`))
     this.budget = budgetOf(this.maskpointConfig)
+    this.maskOptions = maskOptionsOf(this.maskpointConfig)
   }
 
   /**
@@ -182,7 +185,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
       signal: cancellation,
     })
 
-    const outcome = await run(snapshot, this.budget, deps)
+    const outcome = await run(snapshot, this.budget, deps, this.maskOptions)
     if (outcome.kind === 'decline') {
       // A decline is the engine saying this region cannot be trusted or is empty. The host's
       // transaction closes the attempt and reports it as its `summary` failure, unchanged history.

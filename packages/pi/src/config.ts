@@ -55,6 +55,11 @@ export const CHANNELS: Record<keyof EngineConfig, Channels> = {
     flag: 'maskpoint-checkpoint-model',
     description: 'Maskpoint: model id for the checkpoint call. Accepted and validated, but not yet used: a checkpoint runs on the session model',
   },
+  maskReasoning: {
+    env: 'MASKPOINT_MASK_REASONING',
+    flag: 'maskpoint-mask-reasoning',
+    description: 'Maskpoint: also replace assistant reasoning with a one-line placeholder, which cuts the compacted candidate by about a third (default false; short blocks are still kept)',
+  },
   notificationLevel: {
     env: 'MASKPOINT_NOTIFICATION_LEVEL',
     flag: 'maskpoint-notification-level',
@@ -90,6 +95,8 @@ function coerce(field: keyof EngineConfig, value: unknown): unknown {
       return value
     case 'checkpointTriggerTokens':
       return /^\d+$/.test(value) ? Number(value) : value
+    case 'maskReasoning':
+      return coerce('enabled', value)
     default:
       return value
   }

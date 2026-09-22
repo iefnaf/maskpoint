@@ -5,6 +5,7 @@ import {
   decide,
   type DeclineReason,
   type EngineDetail,
+  type MaskOptions,
 } from '@maskpoint/core'
 import type { Rec } from './normalize.js'
 import { artifactRenderer } from './render.js'
@@ -38,7 +39,7 @@ export type CcEffect =
 
 const decline = (reason: DeclineReason, note?: string): CcEffect => ({ kind: 'decline', reason, ...(note === undefined ? {} : { note }) })
 
-function plan(entries: readonly Rec[] | undefined, input: PreCompactInput, prior: PersistedState | undefined, budget: BudgetPolicy): CcEffect {
+function plan(entries: readonly Rec[] | undefined, input: PreCompactInput, prior: PersistedState | undefined, budget: BudgetPolicy, maskOptions: MaskOptions): CcEffect {
   const snapshot = buildSnapshot(entries, input, prior)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
 
@@ -46,7 +47,7 @@ function plan(entries: readonly Rec[] | undefined, input: PreCompactInput, prior
   // is a second copy of session content living outside the host's own transcript store, so a tiny
   // unmasked body here (a one-line secret, a short "OK") would be a new exposure that Pi and DSH
   // never create, since their state lives inside the host's own, already-existing session store.
-  const decision = decide(snapshot, budget, { alwaysMask: true })
+  const decision = decide(snapshot, budget, { alwaysMask: true, ...maskOptions })
   if (decision.kind === 'decline') return decline(decision.reason)
 
   // No checkpoint call in this adapter yet: Claude Code's hook protocol gives a command no model
@@ -73,9 +74,10 @@ export function planCompaction(
   input: PreCompactInput,
   prior: PersistedState | undefined,
   budget: BudgetPolicy = DEFAULT_BUDGET,
+  maskOptions: MaskOptions = {},
 ): CcEffect {
   try {
-    return plan(entries, input, prior, budget)
+    return plan(entries, input, prior, budget, maskOptions)
   } catch (error) {
     return decline('engine-failure', error instanceof Error ? error.message : String(error))
   }
