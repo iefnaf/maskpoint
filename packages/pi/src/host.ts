@@ -46,13 +46,39 @@ export interface PiCompactionResult {
     tokensBefore: number
     /** Persisted in the compaction entry. Never contains observation bodies. */
     details?: unknown
+    /**
+     * The provider's own `Usage` for the checkpoint call, when one ran. Pi stores it on the
+     * compaction entry so session totals count the summarization work.
+     */
+    usage?: PiUsage
   }
 }
 
-/** Pi's `Usage`: token accounting for one model response. */
+/**
+ * Pi's `Usage`: token accounting for one model response. Written out in full rather than narrowed
+ * to the fields this adapter reads, because a usage is handed back to Pi as well: Pi's totals add
+ * `usage.cost.total`, so a reduced object could not be forwarded even if this adapter wanted to.
+ */
 export interface PiUsage {
   input: number
   output: number
+  cacheRead: number
+  cacheWrite: number
+  /** Subset of `cacheWrite` written with 1h retention. Only Anthropic reports this split. */
+  cacheWrite1h?: number | undefined
+  /** Reasoning tokens, a subset of `output`. Absent when the provider reports no breakdown. */
+  reasoning?: number | undefined
+  totalTokens: number
+  cost: PiCost
+}
+
+/** Pi's `Usage['cost']`: what the call cost, per field, at the provider's own rates. */
+export interface PiCost {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  total: number
 }
 
 /** The one content-block shape this adapter reads; any other block type is ignored, not narrowed. */
@@ -99,12 +125,21 @@ export interface PiContext {
   modelRegistry: PiModelRegistry
   /**
    * This extension's own settings, however Pi's runtime supplies them for an installed extension
-   * (issue #8, `config.ts`). Absent when the host passes none, which is resolved exactly like an
-   * empty settings object: every field falls back to its documented default. Left as `unknown`,
+   * (issue #8, `config.ts`). Absent when the host passes none, which is every Pi release measured
+   * so far — see issue #39 for what a probe of a real session found, and `config.ts` for the
+   * environment and CLI-flag channels that carry settings instead. Absent is resolved exactly like
+   * an empty settings object: every field falls back to the documented default. Left as `unknown`,
    * like every other Pi-supplied value here, because nothing in this package can validate what a
    * real Pi release actually sends.
    */
   config?: unknown
+}
+
+/** A CLI flag this extension registers: `type: "string"` only, since every setting is read as text. */
+export interface PiFlagOptions {
+  description: string
+  type: 'string'
+  default?: string
 }
 
 export interface PiExtensionApi {
@@ -112,4 +147,8 @@ export interface PiExtensionApi {
     event: 'session_before_compact',
     handler: (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>,
   ): unknown
+  /** Register a CLI flag, so it appears in `pi --help` and can be parsed from this run's command line. */
+  registerFlag(name: string, options: PiFlagOptions): unknown
+  /** This run's value for a registered flag. `undefined` when the flag was not passed. */
+  getFlag(name: string): boolean | string | undefined
 }

@@ -1,32 +1,53 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
 import { firstTurn } from './support/scenario.js'
-import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, toolCall, toolResult, user } from './support/session.js'
+import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, toolCall, toolResult, usageOf, user } from './support/session.js'
 
 type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>
 
-/** Load the extension into a stand-in for Pi and hand back what it subscribed to. */
-function load() {
+/**
+ * Load the extension into a stand-in for Pi and hand back what it subscribed to. `flags` seeds the
+ * command line Pi parsed, and the values only become readable once the factory has returned — which
+ * is what a real Pi does, having parsed its command line after the extension loaded.
+ */
+function load(flags: Record<string, string> = {}) {
   const handlers = new Map<string, Handler>()
+  const registered: string[] = []
+  const values = new Map(Object.entries(flags))
+  let loaded = false
   const pi: PiExtensionApi = {
     on: (event, handler) => {
       handlers.set(event, handler)
     },
+    registerFlag: (name) => {
+      registered.push(name)
+    },
+    getFlag: (name) => (loaded ? values.get(name) : undefined),
   }
   maskpoint(pi)
-  return handlers
+  loaded = true
+  return { handlers, registered }
 }
 
-const handler = () => {
-  const found = load().get('session_before_compact')
+const handler = (flags?: Record<string, string>) => {
+  const found = load(flags).handlers.get('session_before_compact')
   if (found === undefined) throw new Error('the extension did not subscribe to session_before_compact')
   return found
 }
 
 describe('the extension', () => {
   it('subscribes to the pre-compaction event and nothing else', () => {
-    expect([...load().keys()]).toEqual(['session_before_compact'])
+    expect([...load().handlers.keys()]).toEqual(['session_before_compact'])
+  })
+
+  it('registers its settings as CLI flags, so `pi --help` can list them', () => {
+    expect(load().registered).toEqual([
+      'maskpoint-enabled',
+      'maskpoint-checkpoint-trigger-tokens',
+      'maskpoint-checkpoint-model',
+      'maskpoint-notification-level',
+    ])
   })
 
   it('returns a compaction whose cut point and token count are exactly the ones Pi prepared', async () => {
@@ -134,7 +155,11 @@ describe('what the user is told', () => {
   })
 })
 
-describe('configuration (issue #8)', () => {
+describe('configuration (issues #8 and #39)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('returns nothing and touches nothing else when ctx.config disables Maskpoint', async () => {
     const ctx = fakeContext(true, { enabled: false })
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
@@ -171,5 +196,63 @@ describe('configuration (issue #8)', () => {
     expect(result).toBeDefined()
     expect(ctx.notes[0]).toMatchObject({ level: 'warning' })
     expect(ctx.notes[0]?.message).toMatch(/checkpointTriggerTokens/)
+  })
+
+  it('reads a setting from the environment, since Pi itself supplies none', async () => {
+    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '1')
+    const ctx = fakeContext()
+    ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.details).toMatchObject({ strategy: 'checkpoint' })
+  })
+
+  it('reads a setting from its own CLI flag', async () => {
+    const ctx = fakeContext()
+    ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
+    const result = await handler({ 'maskpoint-checkpoint-trigger-tokens': '1' })(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.details).toMatchObject({ strategy: 'checkpoint' })
+  })
+
+  it('lets a flag typed for this run win over the environment, field by field', async () => {
+    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '1')
+    const result = await handler({ 'maskpoint-checkpoint-trigger-tokens': '20000' })(beforeCompact(firstTurn(), 'u2'), fakeContext())
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
+  })
+
+  it('lets the environment win over whatever the host passes in ctx.config', async () => {
+    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '20000')
+    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
+  })
+
+  it('names the channel in the warning when a value from it is invalid', async () => {
+    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', 'lots')
+    const ctx = fakeContext()
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
+    expect(ctx.notes[0]).toMatchObject({ level: 'warning' })
+    expect(ctx.notes[0]?.message).toMatch(/invalid environment value for "checkpointTriggerTokens"/)
+  })
+
+  it('can be disabled from a flag, exactly as ctx.config can disable it', async () => {
+    const result = await handler({ 'maskpoint-enabled': 'false' })(beforeCompact(firstTurn(), 'u2'), fakeContext())
+    expect(result).toBeUndefined()
+  })
+})
+
+describe('the checkpoint usage Pi records (issue #40)', () => {
+  it('hands Pi the provider\'s own usage object, cost included', async () => {
+    const usage = usageOf(321, 65, { cost: { input: 0.01, output: 0.02, cacheRead: 0, cacheWrite: 0, total: 0.03 } })
+    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint', { usage })) }
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.usage).toBe(usage)
+  })
+
+  it('hands Pi no usage for a compaction that made no model call', async () => {
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), fakeContext())
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
+    expect(result?.compaction.usage).toBeUndefined()
   })
 })
