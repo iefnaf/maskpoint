@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DEFAULT_ENGINE_CONFIG } from '@maskpoint/core'
 import { describe, expect, it } from 'vitest'
 import { runHook } from '../src/hooks.js'
 import { scenario } from './support/scenario.js'
@@ -61,6 +62,47 @@ describe('the pre-compact hook', () => {
   it('never throws and always reports success to the host, even for malformed input', () => {
     const s = scenario()
     expect(() => s.preCompact({ transcript_path: undefined })).not.toThrow()
+  })
+})
+
+describe('configuration (issue #8)', () => {
+  it('does nothing at all when disabled: no state, no steering, no residue for a later hook to find', () => {
+    const s = scenario({ config: { enabled: false } })
+    s.writeTranscript(SESSION)
+    const stdout = s.preCompact()
+
+    expect(stdout).toBe('')
+    expect(s.stateFiles()).toEqual({})
+    expect(s.logs.at(-1)).toContain('disabled by configuration')
+  })
+
+  it('leaves session-start and post-compact as no-ops too when disabled', () => {
+    const s = scenario({ config: { enabled: false } })
+    s.writeTranscript(SESSION)
+    s.preCompact()
+    expect(s.sessionStart('compact')).toBe('')
+  })
+
+  it('lowering the checkpoint budget changes the strategy from within-budget to over-budget, end to end', () => {
+    const under = scenario({ config: { checkpointTriggerTokens: 1_000_000 } })
+    under.writeTranscript(SESSION)
+    under.preCompact()
+    expect(JSON.parse(under.stateFile('sess-0001.json')).detail.strategy).toBe('mask')
+    expect(under.logs.at(-1)).not.toContain('over budget')
+
+    const over = scenario({ config: { checkpointTriggerTokens: 1 } })
+    over.writeTranscript(SESSION)
+    over.preCompact()
+    expect(over.logs.at(-1)).toContain('over budget')
+  })
+
+  it('suppresses the routine "assisted" log line at notificationLevel "silent", without affecting the artifact', () => {
+    const s = scenario({ config: { notificationLevel: 'silent' } })
+    s.writeTranscript(SESSION)
+    s.preCompact()
+
+    expect(s.logs).toEqual([])
+    expect(Object.keys(s.stateFiles())).toEqual(['sess-0001.json'])
   })
 })
 
@@ -166,5 +208,6 @@ function runPostCompact(s: ReturnType<typeof scenario>, stdin: string): string {
     now: () => new Date('2026-09-21T10:31:00.000Z'),
     log: (line) => s.logs.push(line),
     steering: true,
+    config: DEFAULT_ENGINE_CONFIG,
   }).stdout
 }

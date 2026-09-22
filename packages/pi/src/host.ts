@@ -97,6 +97,14 @@ export interface PiContext {
   /** The session's active model. Absent when none is configured or authenticated. */
   model: PiModel | undefined
   modelRegistry: PiModelRegistry
+  /**
+   * This extension's own settings, however Pi's runtime supplies them for an installed extension
+   * (issue #8, `config.ts`). Absent when the host passes none, which is resolved exactly like an
+   * empty settings object: every field falls back to its documented default. Left as `unknown`,
+   * like every other Pi-supplied value here, because nothing in this package can validate what a
+   * real Pi release actually sends.
+   */
+  config?: unknown
 }
 
 export interface PiExtensionApi {

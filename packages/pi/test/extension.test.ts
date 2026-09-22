@@ -133,3 +133,43 @@ describe('what the user is told', () => {
     expect(JSON.stringify(ctx.notes)).not.toContain('BODY-1')
   })
 })
+
+describe('configuration (issue #8)', () => {
+  it('returns nothing and touches nothing else when ctx.config disables Maskpoint', async () => {
+    const ctx = fakeContext(true, { enabled: false })
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result).toBeUndefined()
+    expect(ctx.notes).toEqual([])
+  })
+
+  it('lowering the checkpoint budget in ctx.config turns a masked-history result into a checkpoint', async () => {
+    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result?.compaction.details).toMatchObject({ strategy: 'checkpoint' })
+  })
+
+  it('keeps the default budget (masked history, no model call) when ctx.config sets nothing', async () => {
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), fakeContext())
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
+  })
+
+  it('suppresses the routine notification at notificationLevel "silent", but not a decline', async () => {
+    const ctx = fakeContext(true, { notificationLevel: 'silent' })
+    await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(ctx.notes).toEqual([])
+
+    const declineCtx = fakeContext(true, { notificationLevel: 'silent' })
+    const broken = { ...beforeCompact(firstTurn(), 'u2'), branchEntries: 'not a list' } as unknown as PiBeforeCompactEvent
+    await handler()(broken, declineCtx)
+    expect(declineCtx.notes).toHaveLength(1)
+  })
+
+  it('warns through the UI and falls back to the default when ctx.config is invalid, instead of throwing', async () => {
+    const ctx = fakeContext(true, { checkpointTriggerTokens: -1 })
+    const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
+    expect(result).toBeDefined()
+    expect(ctx.notes[0]).toMatchObject({ level: 'warning' })
+    expect(ctx.notes[0]?.message).toMatch(/checkpointTriggerTokens/)
+  })
+})

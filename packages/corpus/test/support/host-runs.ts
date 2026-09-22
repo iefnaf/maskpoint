@@ -1,4 +1,4 @@
-import type { ConversationSnapshot, Stats } from '@maskpoint/core'
+import { DEFAULT_ENGINE_CONFIG, type ConversationSnapshot, type Stats } from '@maskpoint/core'
 import { planCompaction } from '@maskpoint/pi'
 import MaskpointCompactionEngine from '@maskpoint/dsh'
 import { buildDshMessages } from './dsh-encoding.js'
@@ -36,14 +36,19 @@ const DECLINE_ERROR = /^maskpoint: cannot mask this region \((.+)\)$/
 
 /**
  * Drives the DSH adapter's real, exported `summarize()` over a synthetic region, the same method
- * the host's compaction transaction calls. It reads only `this.ctx.logger`, so it is called
- * unbound against a minimal fake context instead of a full cordis host (dsh's own conformance
- * suite, `packages/dsh/test/`, is what exercises the surrounding transaction).
+ * the host's compaction transaction calls. It reads `this.ctx.logger`, `this.budget` and (issue #8)
+ * `this.maskpointConfig`, so it is called unbound against a minimal fake context carrying those
+ * three, instead of a full cordis host (dsh's own conformance suite, `packages/dsh/test/`, is what
+ * exercises the surrounding transaction).
  */
 export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
   const input = buildDshMessages(snapshot)
   const info: string[] = []
-  const fakeEngine = { ctx: { logger: { info: (message: string) => info.push(message), warn: () => {} } } }
+  const fakeEngine = {
+    ctx: { logger: { info: (message: string) => info.push(message), warn: () => {} } },
+    maskpointConfig: DEFAULT_ENGINE_CONFIG,
+    budget: { checkpointTriggerTokens: DEFAULT_ENGINE_CONFIG.checkpointTriggerTokens },
+  }
   const summarize = (MaskpointCompactionEngine.prototype as unknown as { summarize: (...args: unknown[]) => Promise<{ summary: { type: string; text?: string }[] }> }).summarize
 
   try {

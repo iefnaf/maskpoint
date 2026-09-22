@@ -64,6 +64,39 @@ and change one row's `name`:
 A preset row's bare package name resolves from the host base (the profile directory), which is where
 `dsh plugin add` installs it.
 
+## Configuration
+
+Three fields on the row's own `config:` — no new file, the same block `compaction-basic` already
+reads:
+
+```yaml
+- id: compaction-basic
+  name: '@maskpoint/dsh'
+  config:
+    enabled: true
+    checkpointTriggerTokens: 12000
+    notificationLevel: normal
+    # host fields, unchanged: thresholdRatio, retainRatio/retainTokens, summarizationProvider,
+    # summarizationModel, maxTokens, compactionRetries, maxOverflowRetries, modelPolicies, auto
+```
+
+- `enabled: false` makes both `compactIfNeeded` and `summarize` delegate straight to `super` — the
+  unmodified built-in backend this class extends, with no masking, no checkpoint, and nothing of
+  Maskpoint's left in session state.
+- `checkpointTriggerTokens` is `decide()`'s budget for the explicit paths (`/compact`, region
+  compaction): lower it and the same conversation crosses from a masked-history landing into a
+  checkpoint call.
+- There is no separate `checkpointModel` here: the host's own `summarizationProvider` /
+  `summarizationModel` already say who writes a checkpoint, and this backend reads them unchanged.
+- `notificationLevel: "silent"` suppresses the routine per-compaction `info` log lines; warnings are
+  never suppressed.
+- These three are declared loosely on purpose, not type-checked by cordis's own loader: an invalid
+  value warns once through the host's logger and the field falls back to its default, rather than
+  refusing to load the whole backend over one bad setting.
+- Only one config layer reaches this plugin (cordis hands a row's `config:` to it already merged),
+  so — unlike Claude Code — there is no global-versus-project distinction or trust rule to apply here;
+  see Known limits.
+
 ## Composition with the host's pruner
 
 Correct with it mounted, absent, or already run earlier in the session. Its output is recognized by
@@ -83,6 +116,10 @@ masking, where the built-in ran it before compacting.
 - An explicit compaction with nothing worth masking fails with the host's `summary` error.
 - The host's trigger arithmetic, range selection and two summarizer types are restated because the
   published package does not export them.
+- No global-versus-project configuration trust rule: cordis hands this plugin one already-merged
+  `config:` object with no signal for which layer set a field, so a project-local preset copy is
+  trusted the same as the host-plane profile that installed the plugin at all. Treat a project-local
+  preset with the same care as installing the plugin (docs/design.md, Configuration — "As built #8").
 
 ## Drift guards (run in CI, no host binary needed)
 

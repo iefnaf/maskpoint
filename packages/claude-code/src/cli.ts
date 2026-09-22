@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { appendFileSync, mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { loadConfig } from './config.js'
 import { runHook, type HookName } from './hooks.js'
 import { defaultStateDir } from './state.js'
 
@@ -40,14 +42,17 @@ async function main(): Promise<void> {
   }
 
   const stateDir = defaultStateDir()
+  const log = fileLogger(stateDir)
+  const config = loadConfig({ homeDir: homedir(), cwd: process.cwd() }, (message) => log(`maskpoint: ${message}`))
   const stdin = await readStdin()
   const { stdout, exitCode } = runHook(name as HookName, stdin, {
     stateDir,
     now: () => new Date(),
-    log: fileLogger(stateDir),
+    log,
     // An operator can turn off the undocumented steering line without disabling Maskpoint: the
     // artifact path is independent of it (docs/design.md, Claude Code adapter).
     steering: process.env.MASKPOINT_NO_STEERING !== '1',
+    config,
   })
 
   if (stdout !== '') process.stdout.write(stdout)
