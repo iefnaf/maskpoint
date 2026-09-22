@@ -39,7 +39,10 @@ function candidateText(previous: string | undefined, evicted: readonly Item[]): 
 /**
  * The candidate text of an artifact `decide` assembled (previous state, then masked history): exactly
  * what `candidateTokens` measured when the budget was decided, so a checkpoint call is fed the very
- * text the budget compared.
+ * text the budget compared. It is also a plain-text rendering any adapter can use as-is when it has
+ * no host-native structure to render into (Pi's summary text, Claude Code's injected markdown):
+ * rendering is still an adapter's own choice (docs/design.md, "Alternatives considered"), and an
+ * adapter with a different target shape, like DSH's content blocks, does not use this at all.
  */
 export function artifactCandidateText(artifact: Artifact): string {
   const previous = artifact.sections.find((section) => section.kind === 'checkpoint')

@@ -1,6 +1,6 @@
 import { candidateTokens } from './candidate.js'
 import { mergeFileOps } from './fileops.js'
-import { locateBoundary, MaskingError, maskItems } from './mask.js'
+import { locateBoundary, type MaskOptions, MaskingError, maskItems } from './mask.js'
 import type {
   ArtifactSection,
   BudgetPolicy,
@@ -62,13 +62,13 @@ function evictedSince(snapshot: ConversationSnapshot, previous: string | undefin
  * Decide what a compaction returns. Pure and synchronous: it takes no model and no host, so the
  * masked-history path cannot make a model call — only the request for one, when the budget says so.
  */
-export function decide(snapshot: ConversationSnapshot, budget: BudgetPolicy): Decision {
+export function decide(snapshot: ConversationSnapshot, budget: BudgetPolicy, options: MaskOptions = {}): Decision {
   // Empty previous state is no state: it can back no cursor and must not become an empty section.
   const previous = snapshot.previousCheckpoint === '' ? undefined : snapshot.previousCheckpoint
   const evicted = evictedSince(snapshot, previous)
   if (typeof evicted === 'string') return { kind: 'decline', reason: evicted }
 
-  const { items: masked, stats: maskStats } = maskItems(evicted)
+  const { items: masked, stats: maskStats } = maskItems(evicted, options)
   const sections: ArtifactSection[] = []
   if (previous !== undefined) sections.push({ kind: 'checkpoint', text: previous })
   if (masked.length > 0) sections.push({ kind: 'masked-history', items: masked })

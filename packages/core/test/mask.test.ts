@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Item, ToolResultItem as ToolResult } from '../src/index.js'
-import { estimateTokens, MaskingError, maskSpan } from '../src/index.js'
+import { estimateTokens, MaskingError, maskItems, maskSpan } from '../src/index.js'
 
 const BODY_HEAD = 'HEAD-OF-THE-OBSERVATION-BODY'
 const BODY_TAIL = 'TAIL-OF-THE-OBSERVATION-BODY'
@@ -286,5 +286,38 @@ describe('maskSpan — refusing what it cannot trust', () => {
       items: [],
       stats: { observationsMasked: 0, charsOmitted: 0 },
     })
+  })
+})
+
+describe('maskItems — masking every body (alwaysMask)', () => {
+  const secret = 'API_KEY=sk-live-0123456789'
+
+  it('is off by default: a tiny observation stays verbatim under the no-expansion rule', () => {
+    const item = result('s0', { text: secret })
+    expect(maskItems([item]).items[0]).toEqual(item)
+  })
+
+  it('masks an observation the no-expansion rule would leave verbatim, so no body survives', () => {
+    const { items, stats } = maskItems([result('s1', { text: 'OK' }), result('s2', { text: secret })], { alwaysMask: true })
+    for (const id of ['s1', 's2']) {
+      const masked = resultAt(items, id)
+      expect(masked.masked).toBe(true)
+      expect(masked.text).toMatch(/^\[tool result omitted: bash, ok, 1 line, \d+ chars\]$/)
+    }
+    expect(JSON.stringify(items)).not.toContain('sk-live')
+    expect(stats).toEqual({ observationsMasked: 2, charsOmitted: 2 + secret.length })
+  })
+
+  it('still leaves an empty observation and an existing placeholder alone', () => {
+    const placeholder = '[tool result omitted: bash, ok, 900 lines, 30000 chars]'
+    const untouched = [result('e1', { text: '' }), result('e2', { text: placeholder }), result('e3', { text: 'x', masked: true })]
+    const { items, stats } = maskItems(untouched, { alwaysMask: true })
+    expect(items).toEqual(untouched)
+    expect(stats.observationsMasked).toBe(0)
+  })
+
+  it('masks bulky observations exactly as it does without the option', () => {
+    const item = result('b1')
+    expect(maskItems([item], { alwaysMask: true })).toEqual(maskItems([item]))
   })
 })

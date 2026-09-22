@@ -4,6 +4,19 @@ import type { Item, Stats, ToolResultItem } from './vocabulary.js'
 /** What masking measures. `candidateTokens` belongs to accumulation, which owns the candidate. */
 export type MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>
 
+/**
+ * How masking is applied. The default follows the no-expansion rule.
+ */
+export interface MaskOptions {
+  /**
+   * Mask every observation body, even one whose placeholder would not be smaller. For an adapter
+   * that persists the result outside the host's own store, where the rule's saving is not worth a
+   * second copy of a body: a short credential in a one-line result is exactly what it would keep.
+   * Empty bodies and existing placeholders are still left alone.
+   */
+  alwaysMask?: boolean
+}
+
 /** The snapshot cannot be masked as given. Adapters turn this into a decline, so the host compacts. */
 export class MaskingError extends Error {
   override readonly name = 'MaskingError'
@@ -48,7 +61,7 @@ function placeholderFor(item: ToolResultItem, omitted: string | undefined, media
 const replaced = (item: ToolResultItem, text: string): ToolResultItem => ({ ...item, text, media: 0, masked: true })
 
 /** The masked observation and how many characters of text it dropped, or undefined to leave it alone. */
-function maskObservation(item: ToolResultItem): { item: ToolResultItem; charsOmitted: number } | undefined {
+function maskObservation(item: ToolResultItem, options: MaskOptions): { item: ToolResultItem; charsOmitted: number } | undefined {
   // Idempotence: a placeholder is already what masking makes. A host pruner's placeholder is
   // recognized by the `masked` flag its adapter sets when normalizing (see the Item vocabulary);
   // ours is also recognized by its exact text, in case that flag was lost on the way through.
@@ -57,9 +70,10 @@ function maskObservation(item: ToolResultItem): { item: ToolResultItem; charsOmi
   if (PLACEHOLDER.test(body)) return undefined
 
   // No-expansion: a text placeholder must be strictly smaller than what it replaces, by the same
-  // estimator the budget uses. Otherwise the text stays as it was.
+  // estimator the budget uses. Otherwise the text stays as it was, unless the caller asked for
+  // every body to go.
   const bodyPlaceholder = body === '' ? undefined : placeholderFor(item, body, item.media)
-  if (bodyPlaceholder !== undefined && estimateTokens(bodyPlaceholder) < estimateTokens(body)) {
+  if (bodyPlaceholder !== undefined && (options.alwaysMask === true || estimateTokens(bodyPlaceholder) < estimateTokens(body))) {
     return { item: replaced(item, bodyPlaceholder), charsOmitted: countChars(body) }
   }
   if (item.media === 0) return undefined
@@ -75,11 +89,11 @@ function maskObservation(item: ToolResultItem): { item: ToolResultItem; charsOmi
  * Mask every observation in `items`, leaving everything else intact. Pure: returns new items and
  * never mutates its input. Callers decide which span to pass; see `maskSpan` for the boundary rule.
  */
-export function maskItems(items: readonly Item[]): { items: Item[]; stats: MaskStats } {
+export function maskItems(items: readonly Item[], options: MaskOptions = {}): { items: Item[]; stats: MaskStats } {
   const stats: MaskStats = { observationsMasked: 0, charsOmitted: 0 }
   const out = items.map((item): Item => {
     if (item.kind !== 'tool-result') return item
-    const masked = maskObservation(item)
+    const masked = maskObservation(item, options)
     if (masked === undefined) return item
     stats.observationsMasked++
     stats.charsOmitted += masked.charsOmitted
