@@ -1,6 +1,7 @@
 import type { ConversationSnapshot, Item } from '@maskpoint/core'
 import { compactCheckpointSource, CompactionId } from '@deepseek-ai/dsh-compaction'
 import type { Message } from '@deepseek-ai/dsh-llm'
+import { boundaryIndex, representedThroughIndex } from '../../src/items.js'
 
 function assistantBlock(item: Item): Record<string, unknown> {
   switch (item.kind) {
@@ -64,13 +65,12 @@ function messageFor(item: Item, id: string): Record<string, unknown> {
 export function buildDshMessages(snapshot: ConversationSnapshot): { messages: Message[] } {
   const { items } = snapshot
 
-  const representedThroughIndex =
-    snapshot.evictedThrough === undefined ? -1 : items.findIndex((item) => item.id === snapshot.evictedThrough)
-  if (snapshot.evictedThrough !== undefined && representedThroughIndex === -1) {
+  const represented = representedThroughIndex(snapshot)
+  if (snapshot.evictedThrough !== undefined && represented === -1) {
     throw new Error('dsh-encoding: evictedThrough names no item')
   }
-  const boundaryIndex = items.findIndex((item) => item.id === snapshot.boundary.id)
-  if (boundaryIndex === -1) throw new Error('dsh-encoding: boundary names no item')
+  const boundary = boundaryIndex(snapshot)
+  if (boundary === -1) throw new Error('dsh-encoding: boundary names no item')
 
   const messages: Record<string, unknown>[] = []
   if (snapshot.previousCheckpoint !== undefined) {
@@ -83,7 +83,7 @@ export function buildDshMessages(snapshot: ConversationSnapshot): { messages: Me
   }
 
   let n = 0
-  for (let index = representedThroughIndex + 1; index < boundaryIndex; index++) {
+  for (let index = represented + 1; index < boundary; index++) {
     const item = items[index]!
     if (item.kind === 'checkpoint') continue // represented by the checkpoint message above, if any
     messages.push(messageFor(item, `msg-${n++}`))

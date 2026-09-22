@@ -4,10 +4,15 @@ import MaskpointCompactionEngine from '@maskpoint/dsh'
 import { buildDshMessages } from './dsh-encoding.js'
 import { buildPiEvent } from './pi-encoding.js'
 
-/** What both adapters reduce to, so the same assertions can run over either. */
+/**
+ * What both adapters reduce to, so the same assertions can run over either. `outcome` uses the
+ * engine's own vocabulary (`Outcome['kind']`, docs/design.md "Interfaces"): `'masked-history'` or
+ * `'decline'`. Neither adapter can reach `'checkpoint'` yet (issues #7, #11), so it is not a
+ * member here.
+ */
 export interface HostRun {
   host: 'pi' | 'dsh'
-  outcome: 'masked' | 'declined'
+  outcome: 'masked-history' | 'decline'
   /** Set when declined: the reason, in whichever adapter's own `DeclineReason` vocabulary. */
   reason?: string
   /** Set when masked: the rendered masked-history text, in each adapter's own renderer. */
@@ -18,8 +23,8 @@ export interface HostRun {
 /** Drives the Pi adapter's real, exported `planCompaction` over a synthetic recording. */
 export function runPi(snapshot: ConversationSnapshot): HostRun {
   const effect = planCompaction(buildPiEvent(snapshot))
-  if (effect.kind === 'decline') return { host: 'pi', outcome: 'declined', reason: effect.reason }
-  return { host: 'pi', outcome: 'masked', text: effect.summary, stats: effect.detail.stats }
+  if (effect.kind === 'decline') return { host: 'pi', outcome: 'decline', reason: effect.reason }
+  return { host: 'pi', outcome: 'masked-history', text: effect.summary, stats: effect.detail.stats }
 }
 
 // The statistics `MaskpointCompactionEngine.summarize()` logs (packages/dsh/src/engine.ts). Reading
@@ -50,7 +55,7 @@ export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
     const text = result.summary.map((block) => (block.type === 'text' ? (block.text ?? '') : '')).join('')
     return {
       host: 'dsh',
-      outcome: 'masked',
+      outcome: 'masked-history',
       text,
       stats: {
         observationsMasked: Number(observationsMasked),
@@ -62,6 +67,6 @@ export async function runDsh(snapshot: ConversationSnapshot): Promise<HostRun> {
     const message = error instanceof Error ? error.message : String(error)
     const match = DECLINE_ERROR.exec(message)
     if (match === null) throw error
-    return { host: 'dsh', outcome: 'declined', reason: match[1]! }
+    return { host: 'dsh', outcome: 'decline', reason: match[1]! }
   }
 }

@@ -7,3 +7,8 @@ export const payload = payloadOf
 export function boundaryIndex(snapshot: ConversationSnapshot): number {
   return snapshot.items.findIndex((item) => item.id === snapshot.boundary.id)
 }
+
+/** Index of the last item `previousCheckpoint` already represents, or -1 with no previous state. */
+export function representedThroughIndex(snapshot: ConversationSnapshot): number {
+  return snapshot.evictedThrough === undefined ? -1 : snapshot.items.findIndex((item) => item.id === snapshot.evictedThrough)
+}

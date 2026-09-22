@@ -10,15 +10,6 @@ import { runDsh, runPi } from './support/host-runs.js'
  * with a reason: "never a silent skip" means a new fixture defaults to being compared, not excused.
  */
 const EXCLUDED: Record<string, string> = {
-  'pre-masked': [
-    "Simulates observations a host-side pruner already replaced. DSH has such a pruner (an",
-    'optional sibling backend) and recognizes its marker text (packages/dsh/src/normalize.ts,',
-    'HOST_PRUNE_MARKER); Pi has no host-side pruner and no equivalent placeholder concept, so',
-    'there is no Pi side to compare this fixture against (docs/design.md, DSH adapter,',
-    '"Composition with the host\'s pruner"). Idempotence itself is already covered per host: for',
-    'the algorithm directly by packages/corpus/test/masking.test.ts against this fixture, and for',
-    'DSH specifically by packages/dsh/test/pruner.test.ts and automatic.test.ts.',
-  ].join(' '),
   cjk: [
     'Carries customInstructions. Pi declines with checkpoint-unavailable: a focus needs a model',
     "and this adapter makes none yet (issue #7). DSH's engine does not read customInstructions",
@@ -62,7 +53,7 @@ describe('cross-platform parity: the shared corpus through the Pi and DSH adapte
       const dsh = await runDsh(fixture.snapshot)
 
       expect(dsh.outcome, `dsh outcome for "${fixture.name}"`).toBe(pi.outcome)
-      if (pi.outcome === 'declined') {
+      if (pi.outcome === 'decline') {
         expect(dsh.reason, `dsh decline reason for "${fixture.name}"`).toBe(pi.reason)
         return
       }
@@ -76,12 +67,12 @@ describe('documented divergence: custom instructions, before issues #7 and #11 b
   const fixture = findFixture('cjk')
 
   it('Pi declines: a focus needs a model, and this adapter makes none', () => {
-    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'declined', reason: 'checkpoint-unavailable' })
+    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'checkpoint-unavailable' })
   })
 
   it("DSH masks normally: its explicit compaction input carries no customInstructions field yet", async () => {
     const dsh = await runDsh(fixture.snapshot)
-    expect(dsh.outcome).toBe('masked')
+    expect(dsh.outcome).toBe('masked-history')
   })
 })
 
@@ -89,11 +80,11 @@ describe('documented gap: no-size-reduction thresholds are estimator-specific', 
   const fixture = findFixture('parallel-tool-calls')
 
   it("Pi declines: its own estimator says the framed result would not shrink the context", () => {
-    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'declined', reason: 'no-size-reduction' })
+    expect(runPi(fixture.snapshot)).toEqual({ host: 'pi', outcome: 'decline', reason: 'no-size-reduction' })
   })
 
   it('DSH masks: engine.ts asserts no shrink guard of its own for the explicit path', async () => {
     const dsh = await runDsh(fixture.snapshot)
-    expect(dsh.outcome).toBe('masked')
+    expect(dsh.outcome).toBe('masked-history')
   })
 })

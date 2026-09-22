@@ -1,5 +1,6 @@
 import type { ConversationSnapshot, Item } from '@maskpoint/core'
 import type { PiBeforeCompactEvent } from '@maskpoint/pi'
+import { boundaryIndex, representedThroughIndex } from '../../src/items.js'
 
 type Entry = Record<string, unknown>
 
@@ -79,13 +80,12 @@ function entryFor(item: Item, id: string): Entry {
 export function buildPiEvent(snapshot: ConversationSnapshot): PiBeforeCompactEvent {
   const { items } = snapshot
 
-  const representedThroughIndex =
-    snapshot.evictedThrough === undefined ? -1 : items.findIndex((item) => item.id === snapshot.evictedThrough)
-  if (snapshot.evictedThrough !== undefined && representedThroughIndex === -1) {
+  const represented = representedThroughIndex(snapshot)
+  if (snapshot.evictedThrough !== undefined && represented === -1) {
     throw new Error('pi-encoding: evictedThrough names no item')
   }
-  const boundaryIndex = items.findIndex((item) => item.id === snapshot.boundary.id)
-  if (boundaryIndex === -1) throw new Error('pi-encoding: boundary names no item')
+  const boundary = boundaryIndex(snapshot)
+  if (boundary === -1) throw new Error('pi-encoding: boundary names no item')
 
   const entryIdOf = new Map<string, string>()
   let n = 0
@@ -96,7 +96,7 @@ export function buildPiEvent(snapshot: ConversationSnapshot): PiBeforeCompactEve
   const entries: Entry[] = []
   items.forEach((item, index) => {
     if (item.kind !== 'checkpoint') entries.push(entryFor(item, entryIdOf.get(item.id)!))
-    if (index === representedThroughIndex) {
+    if (index === represented) {
       const nextItem = items[index + 1]
       if (nextItem === undefined) throw new Error('pi-encoding: nothing follows the previous checkpoint')
       entries.push({
@@ -112,12 +112,12 @@ export function buildPiEvent(snapshot: ConversationSnapshot): PiBeforeCompactEve
   })
 
   const qualifying = items.filter(
-    (item, index) => index > representedThroughIndex && index < boundaryIndex && countsTowardPiMessages(item.kind),
+    (item, index) => index > represented && index < boundary && countsTowardPiMessages(item.kind),
   ).length
 
   return {
     preparation: {
-      firstKeptEntryId: entryIdOf.get(items[boundaryIndex]!.id)!,
+      firstKeptEntryId: entryIdOf.get(items[boundary]!.id)!,
       messagesToSummarize: new Array(qualifying).fill({}),
       turnPrefixMessages: [],
       isSplitTurn: false,
