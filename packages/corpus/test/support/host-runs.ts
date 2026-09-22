@@ -1,7 +1,7 @@
 import { budgetOf, DEFAULT_ENGINE_CONFIG, type ConversationSnapshot, type Stats } from '@maskpoint/core'
 import { planCompaction, type PiContext } from '@maskpoint/pi'
 import MaskpointCompactionEngine from '@maskpoint/dsh'
-import { buildDshMessages } from './dsh-encoding.js'
+import { buildDshMessages } from '../../src/dsh-encoding.js'
 import { buildPiEvent } from './pi-encoding.js'
 
 /**
