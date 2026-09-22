@@ -1,6 +1,6 @@
 {
   "name": "@maskpoint/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Platform-free vocabulary and engine for Maskpoint. No host SDK, no I/O.",
   "license": "MIT",
   "repository": {
