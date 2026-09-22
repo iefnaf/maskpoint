@@ -2,6 +2,12 @@
   "name": "maskpoint-workspace",
   "private": true,
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iefnaf/maskpoint.git"
+  },
+  "bugs": "https://github.com/iefnaf/maskpoint/issues",
   "workspaces": [
     "packages/*"
   ],
@@ -13,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "check:corpus": "tsx packages/corpus/src/cli.ts check && tsx packages/corpus/src/cli.ts check packages/pi/test/recorded",
-    "replay": "tsx packages/corpus/src/cli.ts replay"
+    "replay": "tsx packages/corpus/src/cli.ts replay",
+    "release": "npm run typecheck && npm test && npm publish -w @maskpoint/core && npm publish -w @maskpoint/pi && npm publish -w @maskpoint/dsh && npm publish -w @maskpoint/claude-code && npm publish -w @maskpoint/codex"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

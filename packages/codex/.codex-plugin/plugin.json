@@ -1,6 +1,6 @@
 {
   "name": "maskpoint-codex",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Maskpoint: pushes preservation instructions into Codex's own compaction prompt where its config allows, and re-injects a masked-history artifact after compaction. Assisted augmentation — Codex's own compactor is not replaced.",
   "hooks": "./hooks/hooks.json"
 }
