@@ -1,6 +1,6 @@
 {
   "name": "@maskpoint/pi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Maskpoint for Pi: compaction that masks stale observations instead of asking a model to summarize them.",
   "license": "MIT",
   "repository": {
@@ -23,7 +23,7 @@
     ]
   },
   "dependencies": {
-    "@maskpoint/core": "^0.1.0"
+    "@maskpoint/core": "^0.1.1"
   },
   "engines": {
     "node": ">=22"
