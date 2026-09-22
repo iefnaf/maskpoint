@@ -36,7 +36,26 @@ claude plugin install ./packages/claude-code
    host's own generic overflow-to-file handling apply, since Claude isn't asked to read that file.
 4. **`PostCompact`** compares the artifact against the host's own compaction summary and appends a
    fidelity-coverage record to the audit log. It is a metric, never a correction: the host's summary
-   is measured, not touched.
+   is measured, not touched. The comparison is local and synchronous — no model call, no network —
+   so it cannot delay the user's next turn. Each record also carries whether the steering channel was
+   active for that compaction (`steered`), so a value decision can compare coverage with it on versus
+   off rather than reading a single blended number.
+
+Run `maskpoint-claude-code audit-summary` to aggregate everything `PostCompact` has recorded so far
+— compaction count, mean coverage, and the steered/unsteered coverage split — into the real-session
+numbers the assisted-tier value decision needs (docs/design.md, Open issue 4).
+
+## The steering channel
+
+`PreCompact`'s stdout line is real but undocumented, so this adapter never lets its status go
+unrecorded: every `PreCompact` run logs whether it emitted the line (`steering channel active` or
+`inactive (disabled)`) and persists it (`steered`) alongside that compaction's state, and every
+`PostCompact` audit record carries the same flag forward. If the channel disappears from Claude Code
+entirely, that shows up as `steered: true` compactions no longer being logged rather than as silence.
+Separately, if the *write itself* ever fails — a closed or broken stdout stream — the CLI reports it
+by name (`undocumented steering channel unavailable on pre-compact: …`) to standard error instead of
+letting it vanish into a generic top-level catch; the hook still exits 0 either way, since the
+artifact path never depends on this channel.
 
 ## Why every observation is masked here, not just the ones that shrink
 
@@ -63,6 +82,7 @@ directories):
     "cursor": { "boundaryId": "__maskpoint_end__", "evictedThroughId": "…#0" }
   },
   "checkpointText": "…rendered masked history, never an observation body…",
+  "steered": true,
   "updatedAt": "2026-09-21T10:30:00.000Z"
 }
 ```
