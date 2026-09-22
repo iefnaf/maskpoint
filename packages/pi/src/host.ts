@@ -19,6 +19,11 @@ export interface PiPreparation {
   tokensBefore: number
   /** The previous compaction's summary text, whichever extension or strategy wrote it. */
   previousSummary?: string | undefined
+  /**
+   * The read, written and edited paths Pi tracked for this span, plus, when the previous compaction
+   * was Pi's own, that compaction's. Sets at runtime; arrays once recorded. Read as `unknown`.
+   */
+  fileOps?: unknown
 }
 
 /** Pi's `SessionBeforeCompactEvent`. */
@@ -44,10 +49,54 @@ export interface PiCompactionResult {
   }
 }
 
+/** Pi's `Usage`: token accounting for one model response. */
+export interface PiUsage {
+  input: number
+  output: number
+}
+
+/** The one content-block shape this adapter reads; any other block type is ignored, not narrowed. */
+export interface PiTextBlock {
+  type: 'text'
+  text: string
+}
+
+/** Pi's `AssistantMessage`, the shape `modelRegistry.complete` resolves to. */
+export interface PiAssistantMessage {
+  content: readonly (PiTextBlock | { type: string })[]
+  usage: PiUsage
+  /** Pi's `StopReason`. `pending` and `deferred` describe a streaming response, never `complete`'s. */
+  stopReason: 'pending' | 'stop' | 'length' | 'toolUse' | 'error' | 'aborted' | 'deferred'
+}
+
+/** Pi's `Model`: opaque beyond identity, since this adapter never inspects it, only forwards it. */
+export interface PiModel {
+  id: string
+}
+
+export interface PiCompleteOptions {
+  maxTokens?: number
+  signal?: AbortSignal | undefined
+  cacheRetention?: 'none' | 'default'
+  sessionId?: string
+}
+
+/** The slice of Pi's `ModelRegistry` the checkpoint call uses. */
+export interface PiModelRegistry {
+  complete(
+    model: PiModel,
+    context: { systemPrompt?: string; messages: readonly { role: 'user'; content: string; timestamp: number }[] },
+    options?: PiCompleteOptions,
+  ): Promise<PiAssistantMessage>
+}
+
 /** The parts of Pi's `ExtensionContext` the handler uses. */
 export interface PiContext {
   hasUI: boolean
   ui: { notify(message: string, level?: 'info' | 'warning' | 'error'): void }
+  /** The session's active model. Absent when none is configured or authenticated. */
+  model: PiModel | undefined
+  modelRegistry: PiModelRegistry
 }
 
 export interface PiExtensionApi {

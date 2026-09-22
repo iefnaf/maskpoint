@@ -1,4 +1,5 @@
 import type { ConversationSnapshot, DeclineReason, Item } from '@maskpoint/core'
+import { fileOpsOf, latestEngineDetail } from './details.js'
 import type { PiBeforeCompactEvent } from './host.js'
 import { isRecord, itemId, normalizeEntry, type Rec, UnrecognizedShape, yieldsMessage } from './normalize.js'
 
@@ -91,11 +92,15 @@ export function buildSnapshot(event: PiBeforeCompactEvent): ConversationSnapshot
   if (boundaryAt === -1) return unreadable('nothing at or after the cut is model-visible')
 
   const evictedThroughAt = previous >= 0 ? entryOfItem.findLastIndex((index) => index < represented) : -1
+  const fileOps = fileOpsOf(preparation.fileOps)
+  const previousDetail = latestEngineDetail(entries)
   return {
     items,
     boundary: { id: items[boundaryAt]!.id },
     ...(previousCheckpoint === undefined ? {} : { previousCheckpoint }),
     ...(evictedThroughAt === -1 ? {} : { evictedThrough: items[evictedThroughAt]!.id }),
+    ...(fileOps === undefined ? {} : { fileOps }),
+    ...(previousDetail === undefined ? {} : { previousDetail }),
     ...(event.customInstructions === undefined ? {} : { customInstructions: event.customInstructions }),
     reason: event.reason,
   }
