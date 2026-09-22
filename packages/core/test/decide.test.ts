@@ -324,3 +324,29 @@ describe('decide — a missing or inconsistent cursor declines instead of double
     expect(decide(snap(clash, 'u2'), HUGE)).toEqual({ kind: 'decline', reason: 'masking-failure' })
   })
 })
+
+describe('decide — masking every body for an adapter that persists the result', () => {
+  const secret = 'AWS_SECRET_ACCESS_KEY=abc123'
+  const items: Item[] = [
+    ...turn(1, secret),
+    ...turn(2),
+    { id: 'u3', kind: 'user', text: 'The retained request.' },
+  ]
+
+  it('keeps a tiny observation verbatim by default, since masking it would only enlarge the history', () => {
+    const outcome = asMasked(decide(snap(items, 'u3'), HUGE))
+    expect(JSON.stringify(outcome.artifact)).toContain(secret)
+  })
+
+  it('leaves no observation body anywhere in the artifact or its statistics when asked to mask every body', () => {
+    const outcome = asMasked(decide(snap(items, 'u3'), HUGE, { alwaysMask: true }))
+    expect(JSON.stringify(outcome)).not.toContain(secret)
+    expect(outcome.stats.observationsMasked).toBe(2)
+  })
+
+  it('measures the candidate on what it returns, so the budget sees the placeholder, not the body', () => {
+    const plain = asMasked(decide(snap(items, 'u3'), HUGE))
+    const all = asMasked(decide(snap(items, 'u3'), HUGE, { alwaysMask: true }))
+    expect(all.stats.candidateTokens).not.toBe(plain.stats.candidateTokens)
+  })
+})
