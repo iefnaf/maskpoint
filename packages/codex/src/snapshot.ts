@@ -1,0 +1,59 @@
+import type { ConversationSnapshot, DeclineReason, Item } from '@maskpoint/core'
+import { normalizeTranscript, type Rec } from './normalize.js'
+import type { PersistedState } from './state.js'
+
+/** Why no snapshot could be built. `note` says what was structurally wrong, never what it contained. */
+export interface SnapshotDecline {
+  reason: DeclineReason
+  note: string
+}
+
+const unreadable = (note: string): SnapshotDecline => ({ reason: 'unreadable-snapshot', note })
+
+/**
+ * The id every snapshot's boundary names. Like the Claude Code adapter, this one never keeps a
+ * retained region of its own: Codex's real retention is untouched and out of scope for an assisted
+ * adapter, so the boundary sits after the last real item and every item is eligible for masking —
+ * exactly what a self-contained, re-injectable artifact needs.
+ */
+export const END_BOUNDARY_ID = '__maskpoint_end__'
+
+export interface PreCompactInput {
+  customInstructions?: string | undefined
+  trigger: 'manual' | 'auto'
+}
+
+/**
+ * Build the engine's snapshot from a parsed rollout, the pre-compaction hook's own input, and
+ * whatever this adapter persisted for the session last time. `entries` is undefined when the
+ * rollout file could not be read at all, which declines rather than guessing at an empty session.
+ */
+export function buildSnapshot(
+  entries: readonly Rec[] | undefined,
+  input: PreCompactInput,
+  prior: PersistedState | undefined,
+): ConversationSnapshot | SnapshotDecline {
+  if (entries === undefined) return unreadable('the rollout could not be read')
+
+  const items: Item[] = normalizeTranscript(entries)
+  if (items.some((item) => item.id === END_BOUNDARY_ID)) return unreadable('an item id collided with the boundary sentinel')
+  items.push({ id: END_BOUNDARY_ID, kind: 'opaque', note: 'end of pre-compaction rollout' })
+
+  return {
+    items,
+    boundary: { id: END_BOUNDARY_ID },
+    ...(prior === undefined
+      ? {}
+      : {
+          previousCheckpoint: prior.checkpointText,
+          ...(prior.detail.cursor === undefined ? {} : { evictedThrough: prior.detail.cursor.evictedThroughId }),
+          previousDetail: prior.detail,
+        }),
+    ...(input.customInstructions ? { customInstructions: input.customInstructions } : {}),
+    // Codex's PreCompact payload distinguishes only manual vs. auto; neither `decide` nor `maskSpan`
+    // reads this field, so the approximation costs nothing (mirrors the Claude Code adapter).
+    reason: input.trigger === 'manual' ? 'manual' : 'threshold',
+  }
+}
+
+export const isDecline = (result: ConversationSnapshot | SnapshotDecline): result is SnapshotDecline => !('items' in result)
