@@ -44,6 +44,10 @@ describe('summarizeAudit — real-session numbers for the assisted-tier value de
       steeringActiveRate: 0,
       steeredCoverage: undefined,
       unsteeredCoverage: undefined,
+      meanArtifactChars: undefined,
+      meanHostSummaryChars: undefined,
+      meanDuplicationRatio: undefined,
+      duplicationRatioSamples: 0,
     })
   })
 
@@ -76,5 +80,49 @@ describe('summarizeAudit — real-session numbers for the assisted-tier value de
     expect(summary.steeredCoverage).toBeCloseTo(0.8)
     expect(summary.unsteeredCoverage).toBeUndefined()
     expect(summary.steeringActiveRate).toBe(1)
+  })
+
+  it('reports the duplication cost of the injected artifact against the host summary it rides alongside', () => {
+    const summary = summarizeAudit([
+      { coverage: 1, artifactChars: 200, hostSummaryChars: 100 },
+      { coverage: 1, artifactChars: 100, hostSummaryChars: 50 },
+    ])
+    expect(summary.meanArtifactChars).toBeCloseTo(150)
+    expect(summary.meanHostSummaryChars).toBeCloseTo(75)
+    // Mean of the per-compaction ratios (2.0, 2.0), not the ratio of the means.
+    expect(summary.meanDuplicationRatio).toBeCloseTo(2)
+    expect(summary.duplicationRatioSamples).toBe(2)
+  })
+
+  it('leaves duplication-cost fields undefined when no record reports sizes', () => {
+    const summary = summarizeAudit([{ coverage: 1 }, { coverage: 0.5 }])
+    expect(summary.meanArtifactChars).toBeUndefined()
+    expect(summary.meanHostSummaryChars).toBeUndefined()
+    expect(summary.meanDuplicationRatio).toBeUndefined()
+    expect(summary.duplicationRatioSamples).toBe(0)
+  })
+
+  it('counts a record toward one size mean even when it reports only that one field', () => {
+    const summary = summarizeAudit([
+      { coverage: 1, artifactChars: 200 },
+      { coverage: 1, hostSummaryChars: 100 },
+    ])
+    expect(summary.meanArtifactChars).toBeCloseTo(200)
+    expect(summary.meanHostSummaryChars).toBeCloseTo(100)
+    // Neither record has both fields, so no ratio can be computed.
+    expect(summary.meanDuplicationRatio).toBeUndefined()
+    expect(summary.duplicationRatioSamples).toBe(0)
+  })
+
+  it('excludes a zero-length host summary from the ratio without dropping it from the size means', () => {
+    const summary = summarizeAudit([
+      { coverage: 1, artifactChars: 40, hostSummaryChars: 0 },
+      { coverage: 1, artifactChars: 60, hostSummaryChars: 30 },
+    ])
+    expect(summary.meanArtifactChars).toBeCloseTo(50)
+    expect(summary.meanHostSummaryChars).toBeCloseTo(15)
+    // Only the second record's ratio (2.0) is defined; the first would divide by zero.
+    expect(summary.meanDuplicationRatio).toBeCloseTo(2)
+    expect(summary.duplicationRatioSamples).toBe(1)
   })
 })

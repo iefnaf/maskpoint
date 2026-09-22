@@ -42,8 +42,14 @@ claude plugin install ./packages/claude-code
    off rather than reading a single blended number.
 
 Run `maskpoint-claude-code audit-summary` to aggregate everything `PostCompact` has recorded so far
-— compaction count, mean coverage, and the steered/unsteered coverage split — into the real-session
-numbers the assisted-tier value decision needs (docs/design.md, Open issue 4).
+— compaction count, mean coverage, the steered/unsteered coverage split, and the artifact's
+duplication cost (`meanArtifactChars`, `meanHostSummaryChars`, `meanDuplicationRatio`: how large the
+injected artifact is relative to what the host's own summary already produced, and
+`duplicationRatioSamples`: how many compactions that ratio is actually drawn from, since a
+zero-length host summary is excluded from it to avoid dividing by zero) — into the real-session
+numbers the assisted-tier value decision needs (docs/design.md, Open issue 4). Each `audit.jsonl`
+line already carries `artifactChars`/`hostSummaryChars` per compaction; the summary just aggregates
+them.
 
 ## The steering channel
 
