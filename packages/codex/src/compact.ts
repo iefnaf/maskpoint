@@ -5,6 +5,7 @@ import {
   decide,
   type DeclineReason,
   type EngineDetail,
+  type MaskOptions,
 } from '@maskpoint/core'
 import { checkWiring, ensureCompactPrompt } from './config.js'
 import type { Rec } from './normalize.js'
@@ -57,6 +58,7 @@ function plan(
   prior: PersistedState | undefined,
   budget: BudgetPolicy,
   codexHome: string,
+  maskOptions: MaskOptions,
 ): CcEffect {
   const snapshot = buildSnapshot(entries, input, prior)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
@@ -65,7 +67,7 @@ function plan(
   // is a second copy of session content living outside Codex's own rollout store, so a tiny unmasked
   // body here (a one-line secret, a short "OK") would be a new exposure (mirrors the Claude Code
   // adapter's reasoning in compact.ts).
-  const decision = decide(snapshot, budget, { alwaysMask: true })
+  const decision = decide(snapshot, budget, { alwaysMask: true, ...maskOptions })
   if (decision.kind === 'decline') return decline(decision.reason)
 
   // No checkpoint call in this adapter yet: Codex's hook protocol gives a command no model seam to
@@ -106,9 +108,10 @@ export function planCompaction(
   prior: PersistedState | undefined,
   codexHome: string,
   budget: BudgetPolicy = DEFAULT_BUDGET,
+  maskOptions: MaskOptions = {},
 ): CcEffect {
   try {
-    return plan(entries, input, prior, budget, codexHome)
+    return plan(entries, input, prior, budget, codexHome, maskOptions)
   } catch (error) {
     return decline('engine-failure', error instanceof Error ? error.message : String(error))
   }

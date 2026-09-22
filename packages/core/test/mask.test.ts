@@ -321,3 +321,57 @@ describe('maskItems — masking every body (alwaysMask)', () => {
     expect(maskItems([item], { alwaysMask: true })).toEqual(maskItems([item]))
   })
 })
+
+describe('maskItems — masking assistant reasoning (maskReasoning)', () => {
+  const reasoning = (id: string, text: string): Item => ({ id, kind: 'assistant-reasoning', text })
+  const long = bigBody(40)
+
+  it('is off by default: reasoning stays verbatim, and the statistics do not mention it', () => {
+    const item = reasoning('r1', long)
+    const { items, stats } = maskItems([item])
+    expect(items[0]).toEqual(item)
+    expect(stats).toEqual({ observationsMasked: 0, charsOmitted: 0 })
+    expect('reasoningsMasked' in stats).toBe(false)
+  })
+
+  it('replaces a reasoning block with a placeholder naming only its size', () => {
+    const { items, stats } = maskItems([reasoning('r1', long)], { maskReasoning: true })
+    const masked = items[0]
+    expect(masked).toMatchObject({ id: 'r1', kind: 'assistant-reasoning' })
+    expect((masked as { text: string }).text).toMatch(/^\[reasoning omitted: 40 lines, \d+ chars\]$/)
+    expect((masked as { text: string }).text).not.toContain(BODY_HEAD)
+    expect(stats.reasoningsMasked).toBe(1)
+    expect(stats.observationsMasked).toBe(0)
+    expect(stats.charsOmitted).toBe(long.length)
+  })
+
+  it('counts reasoning separately from observations in one pass', () => {
+    const { stats } = maskItems([result('t1'), reasoning('r1', long), reasoning('r2', long)], { maskReasoning: true })
+    expect(stats).toEqual({ observationsMasked: 1, charsOmitted: 2 * long.length + bigBody().length, reasoningsMasked: 2 })
+  })
+
+  it('keeps a short reasoning block the placeholder would enlarge', () => {
+    const short = reasoning('r3', 'Check the parser first.')
+    const { items, stats } = maskItems([short], { maskReasoning: true })
+    expect(items[0]).toEqual(short)
+    expect(stats.reasoningsMasked).toBeUndefined()
+  })
+
+  it('leaves a block that is already a reasoning placeholder alone, but keeps the count honest', () => {
+    const already = reasoning('r4', '[reasoning omitted: 12 lines, 480 chars]')
+    const empty = reasoning('r5', '')
+    const { items, stats } = maskItems([already, empty], { maskReasoning: true })
+    expect(items).toEqual([already, empty])
+    expect(stats.reasoningsMasked).toBeUndefined()
+    expect(stats.charsOmitted).toBe(0)
+  })
+
+  it('never touches user messages or assistant text, which carry the decisions', () => {
+    const kept: Item[] = [
+      { id: 'u1', kind: 'user', text: 'Ship it once the tests pass.' },
+      { id: 'a1', kind: 'assistant-text', text: 'The suite is green.' },
+    ]
+    const { items } = maskItems([...kept, reasoning('r6', long)], { maskReasoning: true })
+    expect(items.slice(0, 2)).toEqual(kept)
+  })
+})

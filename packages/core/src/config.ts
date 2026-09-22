@@ -1,4 +1,5 @@
 import { DEFAULT_BUDGET } from './decide.js'
+import type { MaskOptions } from './mask.js'
 import type { BudgetPolicy } from './vocabulary.js'
 
 /** How much a compaction logs. Adapters decide what each level actually suppresses. */
@@ -12,6 +13,12 @@ export interface EngineConfig {
   readonly checkpointTriggerTokens: number
   /** A registered model id to use for the checkpoint call instead of the session's own. */
   readonly checkpointModel?: string
+  /**
+   * Mask assistant reasoning as well as observations (`MaskOptions.maskReasoning`). Off by default:
+   * the design promises reasoning verbatim, and the one measurement of the trade-off
+   * (`docs/reasoning-masking-evaluation.md`) left the checkpoint path untested.
+   */
+  readonly maskReasoning: boolean
   readonly notificationLevel: NotificationLevel
 }
 
@@ -19,6 +26,7 @@ export interface EngineConfig {
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   enabled: true,
   checkpointTriggerTokens: DEFAULT_BUDGET.checkpointTriggerTokens,
+  maskReasoning: false,
   notificationLevel: 'normal',
 }
 
@@ -33,7 +41,7 @@ export interface ConfigResolution {
   readonly warnings: readonly ConfigWarning[]
 }
 
-const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'checkpointTriggerTokens', 'checkpointModel', 'notificationLevel']
+const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'checkpointTriggerTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -69,6 +77,10 @@ function applyLayer(raw: unknown, source: string, into: { -readonly [K in keyof 
         break
       case 'checkpointModel':
         if (typeof value === 'string' && value.trim() !== '') into.checkpointModel = value
+        else invalid()
+        break
+      case 'maskReasoning':
+        if (typeof value === 'boolean') into.maskReasoning = value
         else invalid()
         break
       case 'notificationLevel':
@@ -141,4 +153,9 @@ export function resolveEngineConfigLayer(raw: unknown, warn: (message: string) =
 /** The `BudgetPolicy` an `EngineConfig` implies, so every adapter builds it the same way. */
 export function budgetOf(config: Pick<EngineConfig, 'checkpointTriggerTokens'>): BudgetPolicy {
   return { checkpointTriggerTokens: config.checkpointTriggerTokens }
+}
+
+/** The `MaskOptions` an `EngineConfig` implies, so no adapter has to remember the field mapping. */
+export function maskOptionsOf(config: Pick<EngineConfig, 'maskReasoning'>): MaskOptions {
+  return { maskReasoning: config.maskReasoning }
 }

@@ -22,6 +22,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
           MASKPOINT_ENABLED: 'false',
           MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '20000',
           MASKPOINT_CHECKPOINT_MODEL: 'glm-4.6',
+          MASKPOINT_MASK_REASONING: 'true',
           MASKPOINT_NOTIFICATION_LEVEL: 'verbose',
         },
       },
@@ -31,6 +32,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       enabled: false,
       checkpointTriggerTokens: 20_000,
       checkpointModel: 'glm-4.6',
+      maskReasoning: true,
       notificationLevel: 'verbose',
     })
     expect(warned).toEqual([])
@@ -44,6 +46,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
           enabled: true,
           checkpointTriggerTokens: '9000',
           checkpointModel: 'glm-4.6',
+          maskReasoning: true,
           notificationLevel: 'silent',
         },
       },
@@ -53,6 +56,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       enabled: true,
       checkpointTriggerTokens: 9_000,
       checkpointModel: 'glm-4.6',
+      maskReasoning: true,
       notificationLevel: 'silent',
     })
     expect(warned).toEqual([])
@@ -121,6 +125,7 @@ describe('flagSpecs', () => {
       'maskpoint-checkpoint-model',
       'maskpoint-checkpoint-trigger-tokens',
       'maskpoint-enabled',
+      'maskpoint-mask-reasoning',
       'maskpoint-notification-level',
     ])
     for (const spec of specs) expect(spec.description.length).toBeGreaterThan(20)

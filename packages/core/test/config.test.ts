@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_ENGINE_CONFIG, resolveEngineConfig, resolveEngineConfigLayer, resolveEngineConfigLayers } from '../src/index.js'
+import { budgetOf, DEFAULT_ENGINE_CONFIG, maskOptionsOf, resolveEngineConfig, resolveEngineConfigLayer, resolveEngineConfigLayers } from '../src/index.js'
 
 describe('resolveEngineConfig', () => {
   it('resolves the documented defaults when nothing is configured', () => {
@@ -10,10 +10,10 @@ describe('resolveEngineConfig', () => {
 
   it('applies a valid global layer over the defaults', () => {
     const { config, warnings } = resolveEngineConfig({
-      global: { enabled: false, checkpointTriggerTokens: 8_000, checkpointModel: 'gpt-5', notificationLevel: 'verbose' },
+      global: { enabled: false, checkpointTriggerTokens: 8_000, checkpointModel: 'gpt-5', maskReasoning: true, notificationLevel: 'verbose' },
       projectTrusted: false,
     })
-    expect(config).toEqual({ enabled: false, checkpointTriggerTokens: 8_000, checkpointModel: 'gpt-5', notificationLevel: 'verbose' })
+    expect(config).toEqual({ enabled: false, checkpointTriggerTokens: 8_000, checkpointModel: 'gpt-5', maskReasoning: true, notificationLevel: 'verbose' })
     expect(warnings).toEqual([])
   })
 
@@ -27,6 +27,7 @@ describe('resolveEngineConfig', () => {
     ['checkpointModel', '   '],
     ['checkpointModel', 42],
     ['notificationLevel', 'loud'],
+    ['maskReasoning', 'yes'],
   ])('falls back to the default and warns when global "%s" is %j', (field, value) => {
     const { config, warnings } = resolveEngineConfig({ global: { [field]: value }, projectTrusted: false })
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
@@ -112,7 +113,7 @@ describe('resolveEngineConfigLayers', () => {
         throw new Error('should not warn')
       },
     )
-    expect(config).toEqual({ enabled: false, checkpointTriggerTokens: 20_000, notificationLevel: 'silent' })
+    expect(config).toEqual({ enabled: false, checkpointTriggerTokens: 20_000, maskReasoning: false, notificationLevel: 'silent' })
   })
 
   it('names the layer in every warning, so the operator knows which surface to fix', () => {
@@ -158,5 +159,13 @@ describe('resolveEngineConfigLayers', () => {
       },
     )
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
+  })
+})
+
+describe('budgetOf / maskOptionsOf', () => {
+  it('reads the one field each helper owns, and nothing else', () => {
+    expect(budgetOf({ checkpointTriggerTokens: 20_000 })).toEqual({ checkpointTriggerTokens: 20_000 })
+    expect(maskOptionsOf({ maskReasoning: true })).toEqual({ maskReasoning: true })
+    expect(maskOptionsOf({ maskReasoning: false })).toEqual({ maskReasoning: false })
   })
 })

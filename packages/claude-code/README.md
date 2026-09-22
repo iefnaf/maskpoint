@@ -113,6 +113,7 @@ the time this code does.
   "maskpoint": {
     "enabled": true,
     "checkpointTriggerTokens": 12000,
+    "maskReasoning": false,
     "notificationLevel": "normal"
   }
 }
@@ -125,6 +126,9 @@ the time this code does.
   sooner. This adapter has no checkpoint call yet, so it never triggers one — see "Not yet" below.
 - `checkpointModel` is accepted and validated, but unused: there is nothing to point it at until this
   adapter makes a model call of its own.
+- `maskReasoning: true` masks assistant reasoning as well as observations, each becoming
+  `[reasoning omitted: N lines, M chars]`. Off by default because it trades the rationale behind the
+  work for context; the measurement is [`docs/reasoning-masking-evaluation.md`](../../docs/reasoning-masking-evaluation.md).
 - `notificationLevel: "silent"` suppresses the routine `PreCompact`/`SessionStart`/`PostCompact` log
   lines; a decline is never suppressed.
 - An invalid value (wrong type, out of range, an unrecognized key) warns to the adapter's own log and

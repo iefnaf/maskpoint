@@ -75,6 +75,7 @@ reads:
   config:
     enabled: true
     checkpointTriggerTokens: 12000
+    maskReasoning: false
     notificationLevel: normal
     # host fields, unchanged: thresholdRatio, retainRatio/retainTokens, summarizationProvider,
     # summarizationModel, maxTokens, compactionRetries, maxOverflowRetries, modelPolicies, auto
@@ -86,6 +87,9 @@ reads:
 - `checkpointTriggerTokens` is `decide()`'s budget for the explicit paths (`/compact`, region
   compaction): lower it and the same conversation crosses from a masked-history landing into a
   checkpoint call.
+- `maskReasoning: true` masks assistant reasoning as well as observations, each becoming
+  `[reasoning omitted: N lines, M chars]`. Off by default because it trades the rationale behind the
+  work for context; the measurement is [`docs/reasoning-masking-evaluation.md`](../../docs/reasoning-masking-evaluation.md).
 - There is no separate `checkpointModel` here: the host's own `summarizationProvider` /
   `summarizationModel` already say who writes a checkpoint, and this backend reads them unchanged.
 - `notificationLevel: "silent"` suppresses the routine per-compaction `info` log lines; warnings are

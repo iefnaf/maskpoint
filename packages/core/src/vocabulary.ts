@@ -93,6 +93,11 @@ export interface BudgetPolicy {
 /** The statistics key set, identical on every platform. */
 export interface Stats {
   observationsMasked: number
+  /**
+   * Reasoning blocks masked, present only once reasoning masking is on and has masked something, so
+   * an artifact from either behaviour is recognisable by shape rather than by a zero to interpret.
+   */
+  reasoningsMasked?: number
   charsOmitted: number
   candidateTokens: number
 }
