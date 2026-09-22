@@ -1,4 +1,4 @@
-import type { PiBeforeCompactEvent, PiContext, PiPreparation } from '../../src/host.js'
+import type { PiAssistantMessage, PiBeforeCompactEvent, PiContext, PiModelRegistry, PiPreparation } from '../../src/host.js'
 
 /**
  * Builders for Pi session entries and the `session_before_compact` event Pi derives from them.
@@ -124,6 +124,8 @@ export interface CompactOptions {
   /** The user message that starts the turn being split, when the cut lands mid-turn. */
   splitTurnAt?: string
   tokensBefore?: number
+  /** The file operations Pi tracked for the span, as Pi holds them at runtime: Sets of paths. */
+  fileOps?: { read?: string[]; written?: string[]; edited?: string[] }
 }
 
 /**
@@ -150,6 +152,11 @@ export function beforeCompact(entries: readonly Entry[], keepFrom: string, optio
     isSplitTurn: options.splitTurnAt !== undefined,
     tokensBefore: options.tokensBefore ?? 40_000,
     ...(previousSummary === undefined ? {} : { previousSummary }),
+    fileOps: {
+      read: new Set(options.fileOps?.read),
+      written: new Set(options.fileOps?.written),
+      edited: new Set(options.fileOps?.edited),
+    },
   }
   return {
     preparation,
@@ -165,8 +172,25 @@ export function beforeCompact(entries: readonly Entry[], keepFrom: string, optio
 export const bulky = (mark: string, lines = 40): string =>
   Array.from({ length: lines }, (_, i) => `${mark} line ${i + 1}: the quick brown fox jumps over the lazy dog`).join('\n')
 
-/** A UI context that records what the user would have been shown. */
+/** A successful, non-streaming model reply: `stop`, the given text, and simple token usage. */
+export function modelReply(text: string, overrides: Partial<PiAssistantMessage> = {}): PiAssistantMessage {
+  return { content: [{ type: 'text', text }], usage: { input: 100, output: 40 }, stopReason: 'stop', ...overrides }
+}
+
+/**
+ * A UI context that records what the user would have been shown. `modelRegistry.complete` rejects
+ * by default, so a test that does not expect a checkpoint call catches one it did not ask for.
+ */
 export function fakeContext(hasUI = true): PiContext & { notes: { message: string; level: string | undefined }[] } {
   const notes: { message: string; level: string | undefined }[] = []
-  return { hasUI, ui: { notify: (message, level) => notes.push({ message, level }) }, notes }
+  const modelRegistry: PiModelRegistry = {
+    complete: () => Promise.reject(new Error('no checkpoint call was expected in this test')),
+  }
+  return {
+    hasUI,
+    ui: { notify: (message, level) => notes.push({ message, level }) },
+    notes,
+    model: { id: 'test-model' },
+    modelRegistry,
+  }
 }

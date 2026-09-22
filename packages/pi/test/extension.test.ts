@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
 import { firstTurn } from './support/scenario.js'
-import { assistant, beforeCompact, bulky, fakeContext, text, toolCall, toolResult, user } from './support/session.js'
+import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, toolCall, toolResult, user } from './support/session.js'
 
 type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>
 
@@ -56,8 +56,8 @@ describe('the extension', () => {
   })
 
   it('returns nothing when it declines, so Pi compacts as if it were not installed', async () => {
-    const event = beforeCompact(firstTurn(), 'u2', { reason: 'manual', customInstructions: 'focus on the docs' })
-    expect(await handler()(event, fakeContext())).toBeUndefined()
+    const chat = [user('u1', 'Hi.'), assistant('a1', [text('Hello.')]), user('u2', 'Bye.'), assistant('a2', [text('Goodbye.')])]
+    expect(await handler()(beforeCompact(chat, 'u2'), fakeContext())).toBeUndefined()
   })
 
   it('returns nothing, without throwing, for an event it cannot read', async () => {
@@ -83,7 +83,7 @@ describe('what the user is told', () => {
     expect(ctx.notes[0]?.level).toBe('info')
   })
 
-  it('says so when the history is over the checkpoint budget and no checkpoint ran', async () => {
+  it('says a checkpoint was attempted and not accepted, when over budget and the call fails', async () => {
     const long = 'a long, careful explanation. '.repeat(2500)
     const entries = [
       user('u1', 'Explain everything.'),
@@ -95,21 +95,29 @@ describe('what the user is told', () => {
     const ctx = fakeContext()
     const result = await handler()(beforeCompact(entries, 'u2'), ctx)
     expect(result).toBeDefined()
-    expect(ctx.notes[0]?.message).toMatch(/over the checkpoint budget/i)
-    expect(ctx.notes[0]?.message).toMatch(/no checkpoint/i)
+    expect(ctx.notes[0]?.message).toMatch(/checkpoint/i)
+    expect(ctx.notes[0]?.message).toMatch(/not accepted/i)
   })
 
-  it('does not mention the budget when it was not exceeded', async () => {
+  it('says a checkpoint ran with one model call, when a focus forces one and it succeeds', async () => {
+    const ctx = fakeContext()
+    ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
+    await handler()(beforeCompact(firstTurn(), 'u2', { reason: 'manual', customInstructions: 'focus on the docs' }), ctx)
+    expect(ctx.notes[0]?.message).toMatch(/condensed into a checkpoint/i)
+  })
+
+  it('does not mention a checkpoint when none was attempted', async () => {
     const ctx = fakeContext()
     await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
-    expect(ctx.notes[0]?.message).not.toMatch(/budget/i)
+    expect(ctx.notes[0]?.message).not.toMatch(/checkpoint/i)
   })
 
   it("says why it stepped aside, so a session running Pi's compactor is never a mystery", async () => {
     const ctx = fakeContext()
-    await handler()(beforeCompact(firstTurn(), 'u2', { reason: 'manual', customInstructions: 'focus' }), ctx)
+    const broken = { ...beforeCompact(firstTurn(), 'u2'), branchEntries: 'not a list' } as unknown as PiBeforeCompactEvent
+    await handler()(broken, ctx)
     expect(ctx.notes).toHaveLength(1)
-    expect(ctx.notes[0]?.message).toMatch(/checkpoint-unavailable/)
+    expect(ctx.notes[0]?.message).toMatch(/unreadable-snapshot/)
     expect(ctx.notes[0]?.message).toMatch(/Pi/)
   })
 

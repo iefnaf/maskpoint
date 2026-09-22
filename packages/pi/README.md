@@ -1,7 +1,8 @@
 # @maskpoint/pi
 
 Maskpoint for [Pi](https://github.com/earendil-works/pi): when Pi compacts, stale tool output is
-replaced by short placeholders and no model is called.
+replaced by short placeholders, and a model is called only when accumulated history crosses the
+checkpoint budget or you asked `/compact` for a focus.
 
 **Tier: native replacement.** Pi lets an extension return its own compaction result, so this
 replaces Pi's summarize step rather than sitting beside it.
@@ -30,13 +31,24 @@ automatic threshold, and overflow recovery.
 - Pi's cut point (`firstKeptEntryId`) is returned **exactly as Pi prepared it**. Maskpoint never
   chooses what Pi keeps.
 - The next compaction keeps the previous summary verbatim and appends only what has been evicted
-  since, so a full observation never re-enters the summary.
+  since, so a full observation never re-enters the summary. This survives Pi's own compactor running
+  in between: the adapter reaches back to the latest compaction entry on the branch whose details it
+  recognizes as its own, so a checkpoint count or file list is never lost to a summary Pi wrote.
 - Context strictly shrinks: if the result would not be smaller than what it replaces, Maskpoint
   steps aside.
+- Read, written and edited files Pi tracked for the span are merged into the earlier lists (union,
+  first-seen order) and carried in `details.files`.
+- When the accumulated candidate crosses the checkpoint budget, or you gave `/compact` a focus,
+  Maskpoint makes exactly one model call — through Pi's own configured model, never a network
+  destination of its own — to condense everything into a structured checkpoint. A call that errors,
+  aborts, is cut off by its output cap, calls a tool, or comes back empty is discarded, and the
+  masked history is returned instead; the entry's details and the interactive notice both say when
+  that happened.
 
 ## What is recorded
 
-The compaction entry's `details` holds the engine's state, never any observation content:
+The compaction entry's `details` holds the engine's state, never any observation content. A
+mask-only compaction:
 
 ```json
 {
@@ -46,14 +58,17 @@ The compaction entry's `details` holds the engine's state, never any observation
 }
 ```
 
-`fromHook` is `true` and `usage` is empty, because no model was used. To look at one:
+A compaction that ran a checkpoint has `"strategy": "checkpoint"` and a `checkpoints` count one
+higher than the previous compaction's. `fromHook` is `true`; `usage` on the compaction entry itself
+is not yet populated for a Maskpoint-run checkpoint. To look at one:
 
 ```sh
 jq -c 'select(.type=="compaction") | {fromHook, usage, details}' ~/.pi/agent/sessions/<project>/<session>.jsonl
 ```
 
 In an interactive session Maskpoint also says what it did (`Maskpoint masked 3 observations (3578
-chars omitted), ~367 tokens kept, no model call.`).
+chars omitted), ~367 tokens kept, no model call.`, or, when a checkpoint ran, `...condensed into a
+checkpoint with one model call.`).
 
 ## When it steps aside
 
@@ -66,16 +81,16 @@ when:
 | `unreadable-snapshot` | The history has a shape it does not recognize or cannot reconcile with what Pi prepared (an unknown message role or content block, a cut point that is not on the branch, a different message count than Pi's). |
 | `inconsistent-cursor` | The previous compaction has no summary to build on, or where it left off cannot be trusted. |
 | `no-size-reduction` | The result would not be smaller than what it replaces. |
-| `checkpoint-unavailable` | You gave `/compact` instructions. Focusing a summary needs a model, and this version makes no model call, so Pi's compactor applies them. |
 | `engine-failure` | An unexpected fault. It is contained; Pi compacts. |
+
+A checkpoint call that is attempted and not accepted (a provider error, an abort, a length stop, a
+tool call, or an empty reply) is not a decline: Maskpoint still returns the masked history, with a
+note on why no checkpoint ran.
 
 ## Not yet
 
-The next Pi work is budgeted checkpoints, `/compact <focus>` handled by Maskpoint (Pi's compactor
-applies it today), and carrying Pi's read and modified file lists across compactions. Until then
-those paths still appear in the masked history as tool-call arguments, but Pi's own file tracking
-does not see them once Maskpoint has compacted. Branch summaries for `/tree` are a separate Pi
-mechanism and are not covered.
+There is no per-checkpoint model configuration yet: a checkpoint always uses the session's active
+model. Branch summaries for `/tree` are a separate Pi mechanism and are not covered.
 
 ## Tests
 

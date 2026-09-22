@@ -50,10 +50,10 @@ describe('the Pi package', () => {
     }
   })
 
-  it('reaches for no network or model registry of its own (extension.test.ts covers the behaviour)', () => {
+  it('makes no network call of its own: the checkpoint call goes through the host-supplied model registry only', () => {
     for (const file of sourceFiles()) {
       const code = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
-      expect(code, file).not.toMatch(/\b(fetch|XMLHttpRequest|WebSocket|modelRegistry)\b/)
+      expect(code, file).not.toMatch(/\b(fetch|XMLHttpRequest|WebSocket)\b/)
     }
   })
 

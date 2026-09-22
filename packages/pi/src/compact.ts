@@ -2,15 +2,20 @@ import {
   type Artifact,
   type BudgetPolicy,
   type CapabilityProfile,
+  type CheckpointRejection,
   type ConversationSnapshot,
   DEFAULT_BUDGET,
   type DeclineReason,
-  decide,
+  type EngineDeps,
   type EngineDetail,
   estimateTokens,
+  type ModelRequest,
+  type ModelResponse,
   payloadOf,
+  run,
+  type Usage,
 } from '@maskpoint/core'
-import type { PiBeforeCompactEvent, PiCompactionResult } from './host.js'
+import type { PiAssistantMessage, PiBeforeCompactEvent, PiCompactionResult, PiContext } from './host.js'
 import { summaryRenderer } from './render.js'
 import { buildSnapshot, isDecline } from './snapshot.js'
 
@@ -38,8 +43,10 @@ export type PiEffect =
       boundary: { id: string }
       detail: EngineDetail
       tokensBefore: number
-      /** The candidate exceeded the budget: a checkpoint would have run, and none can here. */
-      overBudget: boolean
+      /** Present only when a checkpoint call produced this result. */
+      usage?: Usage
+      /** Set when a checkpoint was attempted and not accepted, so the caller can say why none ran. */
+      checkpointRejection?: CheckpointRejection
     }
   | { kind: 'decline'; reason: DeclineReason; note?: string }
 
@@ -68,44 +75,98 @@ function tokensReplaced(snapshot: ConversationSnapshot): number {
   return evicted + estimateTokens(snapshot.previousCheckpoint ?? '')
 }
 
-function plan(event: PiBeforeCompactEvent, budget: BudgetPolicy): PiEffect {
+/** The generation cap for a checkpoint call. A tuning parameter, not a derived constant. */
+export const CHECKPOINT_MAX_OUTPUT_TOKENS = 4_000
+
+/** Pi's `StopReason` values a completed (non-streaming) `complete()` call can return. */
+function stopReasonOf(stopReason: PiAssistantMessage['stopReason']): ModelResponse['stopReason'] {
+  switch (stopReason) {
+    case 'stop':
+    case 'length':
+    case 'error':
+    case 'aborted':
+      return stopReason
+    case 'toolUse':
+      return 'tool-call'
+    default:
+      // 'pending' and 'deferred' describe a streaming response; `complete()` never returns one, so a
+      // host that did anyway is treated the same as a provider error rather than narrowed further.
+      return 'error'
+  }
+}
+
+const textOf = (content: PiAssistantMessage['content']): string =>
+  content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n')
+
+/**
+ * The engine's one checkpoint call, translated into Pi's `modelRegistry.complete`. Absent
+ * `deps.checkpoint.model` always means the session's active model in this version: there is no
+ * per-checkpoint model configuration yet.
+ */
+async function completeWith(ctx: PiContext, request: ModelRequest): Promise<ModelResponse> {
+  const model = ctx.model
+  if (model === undefined) throw new Error('no model is configured for this session')
+  const reply = await ctx.modelRegistry.complete(
+    model,
+    { systemPrompt: request.instructions, messages: [{ role: 'user', content: request.input, timestamp: Date.now() }] },
+    { maxTokens: request.maxOutputTokens, signal: request.signal as AbortSignal, cacheRetention: 'none', sessionId: request.routingId },
+  )
+  return {
+    stopReason: stopReasonOf(reply.stopReason),
+    text: textOf(reply.content),
+    usage: { inputTokens: reply.usage.input, outputTokens: reply.usage.output },
+  }
+}
+
+function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext): EngineDeps {
+  return {
+    complete: (request) => completeWith(ctx, request),
+    newRoutingId: () => crypto.randomUUID(),
+    signal: event.signal ?? { aborted: false },
+    checkpoint: { maxOutputTokens: CHECKPOINT_MAX_OUTPUT_TOKENS },
+  }
+}
+
+async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetPolicy): Promise<PiEffect> {
   const snapshot = buildSnapshot(event)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
 
-  const decision = decide(snapshot, budget)
-  if (decision.kind === 'decline') return decline(decision.reason)
-  // A focus needs a model to apply it, and this adapter makes no model call. Pi's own compactor
-  // honours it, which is what the user would get without Maskpoint installed.
-  if (decision.kind === 'checkpoint-requested' && decision.reason === 'custom-instructions') {
-    return decline('checkpoint-unavailable', 'custom instructions need a checkpoint')
-  }
-  // Over budget with no checkpoint to run: the masked history is still a valid, smaller result.
-  const masked = decision.kind === 'checkpoint-requested' ? decision.fallback : decision
-  if (masked.kind !== 'masked-history') return decline('engine-failure', `unexpected outcome "${masked.kind}"`)
+  const outcome = await run(snapshot, budget, buildDeps(event, ctx))
+  if (outcome.kind === 'decline') return decline(outcome.reason)
 
-  const summary = summaryRenderer.render(masked.artifact)
+  const summary = summaryRenderer.render(outcome.artifact)
   // Context must strictly shrink: framing and role labels cost something, so a span with little to
   // mask can render larger than it was.
   if (!(estimateTokens(summary) < tokensReplaced(snapshot))) return decline('no-size-reduction')
 
   return {
     kind: 'native',
-    artifact: masked.artifact,
+    artifact: outcome.artifact,
     summary,
     boundary: { id: event.preparation.firstKeptEntryId },
-    detail: masked.detail,
+    detail: outcome.detail,
     tokensBefore: event.preparation.tokensBefore,
-    overBudget: decision.kind === 'checkpoint-requested',
+    ...(outcome.kind === 'checkpoint' && outcome.usage !== undefined ? { usage: outcome.usage } : {}),
+    ...(outcome.kind === 'masked-history' && outcome.checkpointRejection !== undefined
+      ? { checkpointRejection: outcome.checkpointRejection }
+      : {}),
   }
 }
 
 /**
- * Decide what to do with Pi's pre-compaction event. Synchronous and model-free, and it never
- * throws: a fault becomes a decline, so a session is never left without a compaction result.
+ * Decide what to do with Pi's pre-compaction event. It never throws: a fault becomes a decline, so
+ * a session is never left without a compaction result.
  */
-export function planCompaction(event: PiBeforeCompactEvent, budget: BudgetPolicy = DEFAULT_BUDGET): PiEffect {
+export async function planCompaction(
+  event: PiBeforeCompactEvent,
+  ctx: PiContext,
+  options: { budget?: BudgetPolicy } = {},
+): Promise<PiEffect> {
   try {
-    return plan(event, budget)
+    return await plan(event, ctx, options.budget ?? DEFAULT_BUDGET)
   } catch (error) {
     return decline('engine-failure', error instanceof Error ? error.message : String(error))
   }

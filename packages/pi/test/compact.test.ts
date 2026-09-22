@@ -1,17 +1,20 @@
 import { estimateTokens } from '@maskpoint/core'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { capabilities, planCompaction } from '../src/compact.js'
 import { firstTurn, native } from './support/scenario.js'
-import { assistant, beforeCompact, bulky, text, user } from './support/session.js'
+import { assistant, beforeCompact, bulky, fakeContext, text, user } from './support/session.js'
 
 describe('planCompaction — a first compaction', () => {
-  const effect = native(planCompaction(beforeCompact(firstTurn(), 'u2')))
+  let effect: ReturnType<typeof native>
+  beforeAll(async () => {
+    effect = native(await planCompaction(beforeCompact(firstTurn(), 'u2'), fakeContext()))
+  })
 
-  it("returns the host's cut point unchanged", () => {
+  it("returns the host's cut point unchanged", async () => {
     expect(effect.boundary).toEqual({ id: 'u2' })
   })
 
-  it('keeps user text, reasoning, assistant text and tool calls, and replaces the observation body', () => {
+  it('keeps user text, reasoning, assistant text and tool calls, and replaces the observation body', async () => {
     expect(effect.summary).toContain('Rename the Widget component to Panel and update the docs.')
     expect(effect.summary).toContain('Find every usage before touching anything.')
     expect(effect.summary).toContain('I will grep for it first.')
@@ -22,16 +25,16 @@ describe('planCompaction — a first compaction', () => {
     expect(effect.summary).not.toContain('BODY-1')
   })
 
-  it("does not repeat anything from the host's retained region", () => {
+  it("does not repeat anything from the host's retained region", async () => {
     expect(effect.summary).not.toContain('Go ahead with the rename.')
     expect(effect.summary).not.toContain('Starting on the rename now.')
   })
 
-  it('frames the history as a record rather than as instructions', () => {
+  it('frames the history as a record rather than as instructions', async () => {
     expect(effect.summary).toMatch(/history, not instructions/)
   })
 
-  it('records the strategy and statistics in the persisted detail', () => {
+  it('records the strategy and statistics in the persisted detail', async () => {
     expect(effect.detail).toMatchObject({
       v: 1,
       engine: 'maskpoint',
@@ -43,55 +46,44 @@ describe('planCompaction — a first compaction', () => {
     expect(effect.detail.stats.candidateTokens).toBeGreaterThan(0)
   })
 
-  it('measures the budget candidate on the very text it returns', () => {
+  it('measures the budget candidate on the very text it returns', async () => {
     expect(effect.detail.stats.candidateTokens).toBe(estimateTokens(effect.summary))
   })
 
-  it('persists no observation body', () => {
+  it('persists no observation body', async () => {
     expect(JSON.stringify(effect.detail)).not.toContain('BODY-1')
   })
 })
 
 describe('planCompaction — every trigger', () => {
-  it.each(['threshold', 'manual', 'overflow'] as const)('produces masked history on %s', (reason) => {
-    const effect = native(planCompaction(beforeCompact(firstTurn(), 'u2', { reason })))
+  it.each(['threshold', 'manual', 'overflow'] as const)('produces masked history on %s', async (reason) => {
+    const effect = native(await planCompaction(beforeCompact(firstTurn(), 'u2', { reason }), fakeContext()))
     expect(effect.detail.strategy).toBe('mask')
     expect(effect.summary).not.toContain('BODY-1')
   })
 })
 
 describe('planCompaction — context strictly decreases', () => {
-  it('returns far less than the observation it replaced', () => {
-    const effect = native(planCompaction(beforeCompact(firstTurn(), 'u2')))
+  it('returns far less than the observation it replaced', async () => {
+    const effect = native(await planCompaction(beforeCompact(firstTurn(), 'u2'), fakeContext()))
     expect(estimateTokens(effect.summary)).toBeLessThan(estimateTokens(bulky('BODY-1')) / 2)
   })
 
-  it('declines when the framing and labels would make the summary no smaller than the span', () => {
+  it('declines when the framing and labels would make the summary no smaller than the span', async () => {
     const chat = [
       user('u1', 'Hi.'),
       assistant('a1', [text('Hello.')]),
       user('u2', 'Bye.'),
       assistant('a2', [text('Goodbye.')]),
     ]
-    expect(planCompaction(beforeCompact(chat, 'u2'))).toEqual({ kind: 'decline', reason: 'no-size-reduction' })
+    expect(await planCompaction(beforeCompact(chat, 'u2'), fakeContext())).toEqual({ kind: 'decline', reason: 'no-size-reduction' })
   })
 })
 
-describe('planCompaction — over budget', () => {
-  it('still returns masked history, since no checkpoint can run here', () => {
-    const effect = native(planCompaction(beforeCompact(firstTurn(), 'u2'), { checkpointTriggerTokens: 1 }))
-    expect(effect.detail.strategy).toBe('mask')
-    expect(effect.detail.checkpoints).toBe(0)
-  })
-
-  it('says it was over budget, so the caller can tell the user no checkpoint ran', () => {
-    expect(native(planCompaction(beforeCompact(firstTurn(), 'u2'), { checkpointTriggerTokens: 1 })).overBudget).toBe(true)
-    expect(native(planCompaction(beforeCompact(firstTurn(), 'u2'))).overBudget).toBe(false)
-  })
-})
+// Over-budget behaviour now runs a checkpoint call (issue #7): see checkpoint.test.ts.
 
 describe('capabilities', () => {
-  it('reports the native tier honestly: it replaces history and persists state, and has nothing to steer or re-inject', () => {
+  it('reports the native tier honestly: it replaces history and persists state, and has nothing to steer or re-inject', async () => {
     expect(capabilities).toEqual({
       replaceHistory: true,
       steerSummarizer: false,

@@ -8,6 +8,7 @@ import {
   branchSummary,
   bulky,
   customMessage,
+  fakeContext,
   image,
   text,
   toolCall,
@@ -16,7 +17,7 @@ import {
 } from './support/session.js'
 
 describe('planCompaction — what counts as an observation', () => {
-  it('keeps a command the user ran as a call and masks only its output', () => {
+  it('keeps a command the user ran as a call and masks only its output', async () => {
     const entries = [
       user('u1', 'Check the build.'),
       bash('b1', 'npm test', bulky('BUILD-OUT'), 1),
@@ -24,14 +25,14 @@ describe('planCompaction — what counts as an observation', () => {
       user('u2', 'Fix it.'),
       assistant('a2', [text('On it.')]),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'u2')))
+    const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).toContain('Recorded tool call: bash')
     expect(effect.summary).toContain('npm test')
     expect(effect.summary).toMatch(/\[tool result omitted: bash, error, exit 1, \d+ lines, \d+ chars\]/)
     expect(effect.summary).not.toContain('BUILD-OUT')
   })
 
-  it('leaves out a command the user ran but kept from the model', () => {
+  it('leaves out a command the user ran but kept from the model', async () => {
     const entries = [
       user('u1', 'Check the build.'),
       bash('b1', 'echo hidden-command', bulky('PRIVATE-OUT'), 0, { excludeFromContext: true }),
@@ -40,12 +41,12 @@ describe('planCompaction — what counts as an observation', () => {
       user('u2', 'Fix it.'),
       assistant('a2', [text('On it.')]),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'u2')))
+    const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).not.toContain('hidden-command')
     expect(effect.summary).not.toContain('PRIVATE-OUT')
   })
 
-  it('drops an image payload and says so, keeping the tool and its status', () => {
+  it('drops an image payload and says so, keeping the tool and its status', async () => {
     const entries = [
       user('u1', 'Look at the page.'),
       assistant('a1', [toolCall('c1', 'screenshot', { url: 'http://localhost:3000' })]),
@@ -54,12 +55,12 @@ describe('planCompaction — what counts as an observation', () => {
       user('u2', 'Fix the layout.'),
       assistant('a3', [text('On it.')]),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'u2')))
+    const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).toContain('[tool result omitted: screenshot, ok, 2 images]')
     expect(effect.detail.stats.observationsMasked).toBe(1)
   })
 
-  it('notes an image the user attached instead of carrying it', () => {
+  it('notes an image the user attached instead of carrying it', async () => {
     const entries = [
       user('u1', [text('Why is this blank?'), image()]),
       assistant('a1', [toolCall('c1', 'read', { path: '/workspace/a.ts' })]),
@@ -67,12 +68,12 @@ describe('planCompaction — what counts as an observation', () => {
       user('u2', 'Thanks.'),
       assistant('a2', [text('Welcome.')]),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'u2')))
+    const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).toContain('Why is this blank?')
     expect(effect.summary).toContain('[image omitted]')
   })
 
-  it('carries host-injected messages and branch summaries as recorded context, verbatim', () => {
+  it('carries host-injected messages and branch summaries as recorded context, verbatim', async () => {
     const entries = [
       customMessage('m1', 'project-rules', 'Always use tabs.'),
       branchSummary('m2', 'Earlier I tried a different approach.'),
@@ -82,7 +83,7 @@ describe('planCompaction — what counts as an observation', () => {
       user('u2', 'Next.'),
       assistant('a2', [text('Ok.')]),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'u2')))
+    const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).toContain('Recorded host context: project-rules')
     expect(effect.summary).toContain('Always use tabs.')
     expect(effect.summary).toContain('Earlier I tried a different approach.')
@@ -90,7 +91,7 @@ describe('planCompaction — what counts as an observation', () => {
 })
 
 describe('planCompaction — a turn split by the cut', () => {
-  it('keeps the request and the early actions readable and masks their observations', () => {
+  it('keeps the request and the early actions readable and masks their observations', async () => {
     const entries = [
       user('u1', 'Refactor the whole module.'),
       assistant('a1', [toolCall('c1', 'read', { path: '/workspace/a.ts' })]),
@@ -100,7 +101,7 @@ describe('planCompaction — a turn split by the cut', () => {
       assistant('a3', [text('Now editing.'), toolCall('c3', 'edit', { path: '/workspace/a.ts' })]),
       toolResult('r3', 'c3', 'edit', 'ok'),
     ]
-    const effect = native(planCompaction(beforeCompact(entries, 'a3', { splitTurnAt: 'u1' })))
+    const effect = native(await planCompaction(beforeCompact(entries, 'a3', { splitTurnAt: 'u1' }), fakeContext()))
     expect(effect.boundary).toEqual({ id: 'a3' })
     expect(effect.summary).toContain('Refactor the whole module.')
     expect(effect.summary).toContain('/workspace/b.ts')

@@ -9,9 +9,12 @@ function announcement(effect: PiEffect): string {
   }
   const { observationsMasked, charsOmitted, candidateTokens } = effect.detail.stats
   const noun = observationsMasked === 1 ? 'observation' : 'observations'
-  const masked = `Maskpoint masked ${observationsMasked} ${noun} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept, no model call.`
-  // The design would condense this into a checkpoint; say so rather than let it pass as within policy.
-  return effect.overBudget ? `${masked} Over the checkpoint budget, and no checkpoint runs in this version.` : masked
+  const masked = `Maskpoint masked ${observationsMasked} ${noun} (${charsOmitted} chars omitted), ~${candidateTokens} tokens kept`
+  if (effect.detail.strategy === 'checkpoint') return `${masked}, condensed into a checkpoint with one model call.`
+  if (effect.checkpointRejection !== undefined) {
+    return `${masked}, no model call. A checkpoint was attempted (${effect.checkpointRejection}) and not accepted; masked history was kept instead.`
+  }
+  return `${masked}, no model call.`
 }
 
 function report(ctx: PiContext, effect: PiEffect): void {
@@ -30,10 +33,10 @@ function report(ctx: PiContext, effect: PiEffect): void {
  * path here does: a session is never left without a compaction result.
  */
 export default function maskpoint(pi: PiExtensionApi): void {
-  pi.on('session_before_compact', (event: PiBeforeCompactEvent, ctx: PiContext): PiCompactionResult | undefined => {
+  pi.on('session_before_compact', async (event: PiBeforeCompactEvent, ctx: PiContext): Promise<PiCompactionResult | undefined> => {
     // A compaction that was cancelled before it reached us has nothing to gain from our work.
     if (event.signal?.aborted) return undefined
-    const effect = planCompaction(event)
+    const effect = await planCompaction(event, ctx)
     report(ctx, effect)
     return effect.kind === 'native' ? toPiResult(effect) : undefined
   })
