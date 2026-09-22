@@ -1,7 +1,7 @@
 import type { ConversationSnapshot, Item } from '@maskpoint/core'
 import { compactCheckpointSource, CompactionId } from '@deepseek-ai/dsh-compaction'
 import type { Message } from '@deepseek-ai/dsh-llm'
-import { boundaryIndex, representedThroughIndex } from '../../src/items.js'
+import { boundaryIndex, representedThroughIndex } from './items.js'
 
 function assistantBlock(item: Item): Record<string, unknown> {
   switch (item.kind) {

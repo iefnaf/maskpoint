@@ -14,6 +14,9 @@ every fixture for both native-replacement adapters — see `docs/design.md`, "Te
 - `src/coverage.ts` — derives which content shapes a fixture exercises from its items (never from
   labels); the tests require the corpus to cover the shapes the design lists.
 - `src/replay.ts` — prints masked history and statistics for a fixture.
+- `src/calibration.ts` — compares the internal estimator against DSH's own token meter (issue #16).
+- `src/quality-bars.ts` — reports the design's quality bars (zero-LLM ratio, usable-result rate,
+  context-decrease, checkpoint safety) over the corpus (issue #16).
 
 ## Commands
 
@@ -22,6 +25,8 @@ npm run replay -- <fixture>     # masked history + statistics for one fixture
 npm run check:corpus            # validate the manifest and fixtures, and sanitize them
 npx tsx packages/corpus/src/cli.ts list
 npx tsx packages/corpus/src/cli.ts check <path>   # sanitize arbitrary files or directories
+npx tsx packages/corpus/src/cli.ts calibration    # estimator vs. DSH's own token meter, per fixture
+npx tsx packages/corpus/src/cli.ts quality-bars   # zero-LLM ratio, usable-result rate, context-decrease, checkpoint safety
 ```
 
 `replay` runs the real masking engine from `@maskpoint/core` (`maskingEngine`). A `ReplayEngine` that
@@ -46,12 +51,16 @@ compaction building on an accepted checkpoint. No network.
 
 `test/parity.test.ts` is the cross-platform parity harness (issue #12): every fixture, synthetically
 encoded as the artifact each adapter's own boundary and cursor accounting expects
-(`test/support/pi-encoding.ts`, `test/support/dsh-encoding.ts`), driven through the Pi and DSH
+(`test/support/pi-encoding.ts`, `src/dsh-encoding.ts`), driven through the Pi and DSH
 adapters' real exported entry points, and compared on outcome, statistics, and rendered
 masked-history text. A fixture is compared by default; excluding one needs a named reason in the
 test's `EXCLUDED` map (checked by a test of its own) plus a dedicated pair of tests pinning the
 current, documented divergence — never a silent skip. See `docs/design.md`, "Testing design",
 "As built (#12)".
+
+`test/calibration.test.ts` and `test/quality-bars.test.ts` cover `src/calibration.ts` and
+`src/quality-bars.ts` (issue #16). See [`docs/calibration-report.md`](../../docs/calibration-report.md)
+for the numbers they produce over the current corpus and how to read them.
 
 ## Adding a fixture
 
