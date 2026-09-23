@@ -4,8 +4,8 @@ import { capabilities, type CcEffect, planCompaction } from '../src/compact.js'
 import type { PersistedState } from '../src/state.js'
 import { assistantText, bulky, compaction, toolResult, toolUse, user } from './support/transcript.js'
 
-const HUGE = { checkpointTriggerTokens: 1_000_000 }
-const TINY = { checkpointTriggerTokens: 1 }
+const HUGE = { compactBudgetTokens: 1_000_000 }
+const TINY = { compactBudgetTokens: 1 }
 
 const assisted = (effect: CcEffect): Extract<CcEffect, { kind: 'assisted' }> => {
   if (effect.kind !== 'assisted') throw new Error(`expected assisted, got decline: ${effect.reason} ${effect.note ?? ''}`)

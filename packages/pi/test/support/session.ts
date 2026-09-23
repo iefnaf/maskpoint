@@ -197,7 +197,7 @@ export function modelReply(text: string, overrides: Partial<PiAssistantMessage> 
  * A UI context that records what the user would have been shown. `modelRegistry.complete` rejects
  * by default, so a test that does not expect a checkpoint call catches one it did not ask for.
  */
-export function fakeContext(hasUI = true, config?: unknown): PiContext & { notes: { message: string; level: string | undefined }[] } {
+export function fakeContext(hasUI = true, config?: unknown, contextWindow?: number): PiContext & { notes: { message: string; level: string | undefined }[] } {
   const notes: { message: string; level: string | undefined }[] = []
   const modelRegistry: PiModelRegistry = {
     complete: () => Promise.reject(new Error('no checkpoint call was expected in this test')),
@@ -206,7 +206,7 @@ export function fakeContext(hasUI = true, config?: unknown): PiContext & { notes
     hasUI,
     ui: { notify: (message, level) => notes.push({ message, level }) },
     notes,
-    model: { id: 'test-model' },
+    model: { id: 'test-model', ...(contextWindow === undefined ? {} : { contextWindow }) },
     modelRegistry,
     config,
   }

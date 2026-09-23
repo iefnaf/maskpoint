@@ -8,8 +8,8 @@ import { compactPromptPath } from '../src/config.js'
 import type { PersistedState } from '../src/state.js'
 import { assistantText, bulky, functionCall, functionCallOutput, resetOrdinal, user } from './support/transcript.js'
 
-const HUGE = { checkpointTriggerTokens: 1_000_000 }
-const TINY = { checkpointTriggerTokens: 1 }
+const HUGE = { compactBudgetTokens: 1_000_000 }
+const TINY = { compactBudgetTokens: 1 }
 
 const roots: string[] = []
 afterEach(() => {

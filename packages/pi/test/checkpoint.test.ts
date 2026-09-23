@@ -9,7 +9,7 @@ describe('planCompaction — over budget, with a checkpoint available', () => {
     const complete = vi.fn().mockResolvedValue(modelReply('## Goal\nRename Widget to Panel.'))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(complete).toHaveBeenCalledTimes(1)
     expect(effect.detail.strategy).toBe('checkpoint')
@@ -25,7 +25,7 @@ describe('planCompaction — over budget, with a checkpoint available', () => {
       return Promise.resolve(modelReply('a checkpoint'))
     }
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
-    await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } })
+    await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } })
     expect(sent?.messages[0]?.content).toContain('Rename the Widget component to Panel and update the docs.')
     expect(sent?.messages[0]?.content).not.toContain('BODY-1')
   })
@@ -35,7 +35,7 @@ describe('planCompaction — over budget, with a checkpoint available', () => {
     const complete = vi.fn().mockResolvedValue(modelReply('a checkpoint', { usage }))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(effect.usage).toEqual({ inputTokens: 321, outputTokens: 65 })
     // Identity, not equality: Pi adds `usage.cost.total` to its session totals, so it has to get
@@ -54,7 +54,7 @@ describe('planCompaction — over budget, with a checkpoint available', () => {
     const complete = vi.fn().mockResolvedValue(modelReply('cut off mid-', { stopReason: 'length' }))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(effect.checkpointRejection).toBe('truncated')
     expect(effect.piUsage).toBeUndefined()
@@ -90,7 +90,7 @@ describe('planCompaction — a checkpoint call that is not accepted', () => {
     const complete = vi.fn().mockRejectedValue(new Error('boom'))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(effect.detail.strategy).toBe('mask')
     expect(effect.checkpointRejection).toBe('provider-error')
@@ -101,7 +101,7 @@ describe('planCompaction — a checkpoint call that is not accepted', () => {
     const complete = vi.fn().mockResolvedValue(modelReply('cut off mid-', { stopReason: 'length' }))
     const ctx = { ...fakeContext(), modelRegistry: { complete } }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(effect.checkpointRejection).toBe('truncated')
     expect(effect.summary).not.toContain('cut off mid-')
@@ -110,7 +110,7 @@ describe('planCompaction — a checkpoint call that is not accepted', () => {
   it('falls back to masked history when no model is configured for the session', async () => {
     const ctx = { ...fakeContext(), model: undefined }
     const effect = native(
-      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { checkpointTriggerTokens: 1 } }),
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, { budget: { compactBudgetTokens: 1 } }),
     )
     expect(effect.detail.strategy).toBe('mask')
     expect(effect.checkpointRejection).toBe('provider-error')

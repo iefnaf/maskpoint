@@ -10,12 +10,12 @@ describe('the maskpoint row config (issue #8)', () => {
     await ctx.plugin(MaskpointCompactionEngine, { auto: false })
     expect(ctx.compaction).toBeInstanceOf(MaskpointCompactionEngine)
     const engine = ctx.compaction as MaskpointCompactionEngine
-    expect(engine.maskpointConfig).toEqual({ enabled: true, checkpointTriggerTokens: 12_000, maskReasoning: false, notificationLevel: 'normal' })
+    expect(engine.maskpointConfig).toEqual({ enabled: true, compactBudgetTokens: 24_000, maskReasoning: false, notificationLevel: 'normal' })
   })
 
   it('lowers the checkpoint trigger from the row config, changing masking into a checkpoint end to end', async () => {
     const { ctx, calls } = await scriptedHarness(() => replies.text('## Next steps\n- none'))
-    await ctx.plugin(MaskpointCompactionEngine, { auto: false, checkpointTriggerTokens: 50 })
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false, compactBudgetTokens: 50 })
     const { session } = conversation(ctx, { openTurn: false })
 
     const result = await ctx.compaction.compactNow(agentFor(session), signal)
@@ -24,7 +24,7 @@ describe('the maskpoint row config (issue #8)', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('runs the default budget (no checkpoint call) when checkpointTriggerTokens is not configured', async () => {
+  it('runs the default budget (no checkpoint call) when compactBudgetTokens is not configured', async () => {
     const { ctx, calls } = await scriptedHarness(() => replies.text('## Next steps\n- none'))
     await ctx.plugin(MaskpointCompactionEngine, { auto: false })
     const { session } = conversation(ctx, { openTurn: false })
@@ -34,15 +34,15 @@ describe('the maskpoint row config (issue #8)', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('falls back to the default budget and warns when checkpointTriggerTokens is invalid, instead of failing to load', async () => {
+  it('falls back to the default budget and warns when compactBudgetTokens is invalid, instead of failing to load', async () => {
     const ctx = await harness(1_000_000)
     const warn = vi.spyOn(ctx.logger, 'warn')
-    await ctx.plugin(MaskpointCompactionEngine, { auto: false, checkpointTriggerTokens: -5 })
+    await ctx.plugin(MaskpointCompactionEngine, { auto: false, compactBudgetTokens: -5 })
     const engine = ctx.compaction as MaskpointCompactionEngine
 
-    expect(engine.maskpointConfig.checkpointTriggerTokens).toBe(12_000)
+    expect(engine.maskpointConfig.compactBudgetTokens).toBe(24_000)
     expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
-      'maskpoint: config: invalid global value for "checkpointTriggerTokens" (-5); ignoring it',
+      'maskpoint: config: invalid global value for "compactBudgetTokens" (-5); ignoring it',
     ])
   })
 
@@ -95,7 +95,7 @@ describe('the maskpoint row config (issue #8)', () => {
 
     it('runs the host summary path unmasked for compactNow, never calling Maskpoint at all', async () => {
       const { ctx, calls } = await scriptedHarness(() => replies.text('host wrote this'))
-      await ctx.plugin(MaskpointCompactionEngine, { auto: false, enabled: false, checkpointTriggerTokens: 1 })
+      await ctx.plugin(MaskpointCompactionEngine, { auto: false, enabled: false, compactBudgetTokens: 1 })
       const { session } = conversation(ctx, { openTurn: false })
 
       const result = await ctx.compaction.compactNow(agentFor(session), signal)

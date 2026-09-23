@@ -295,7 +295,7 @@ export function expectedAfter(before: Accounting, shadowed: number, replacement:
 
 /** The fixture conversations are small; this budget puts their masked history over the checkpoint line. */
 export class TightBudget extends MaskpointCompactionEngine {
-  protected override readonly budget = { checkpointTriggerTokens: 50 }
+  protected override readonly budget = { compactBudgetTokens: 50 }
 }
 
 /** The balanced span from the first surface node through the last node of the last closed turn. */

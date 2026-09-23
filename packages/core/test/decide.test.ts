@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Artifact, ConversationSnapshot, Decision, EngineDetail, Item, MaskedHistoryOutcome } from '../src/index.js'
 import { decide, estimateTokens, roleLabel } from '../src/index.js'
 
-const HUGE = { checkpointTriggerTokens: 1_000_000 }
+const HUGE = { compactBudgetTokens: 1_000_000 }
 
 const bulky = (mark: string, lines = 40): string =>
   Array.from({ length: lines }, (_, i) => `${mark} line ${i + 1}: the quick brown fox jumps over the lazy dog`).join('\n')
@@ -103,7 +103,7 @@ describe('decide — the budget decision', () => {
   const all = [...turn(1), ...turn(2), ...turn(3), ...turn(4), ...turn(5)]
   const first = asMasked(decide(snap(all, 'u3'), HUGE))
   const accumulated = (budget: number, extra: Partial<ConversationSnapshot> = {}) =>
-    decide(next(first, all, 'u5', extra), { checkpointTriggerTokens: budget })
+    decide(next(first, all, 'u5', extra), { compactBudgetTokens: budget })
   const size = asMasked(accumulated(1_000_000)).stats.candidateTokens
 
   it('measures the whole candidate: the previous state as well as the newly evicted history', () => {
@@ -157,8 +157,8 @@ describe('decide — the budget decision', () => {
   })
 
   it('still declines on an untrusted snapshot rather than requesting a checkpoint for it', () => {
-    expect(decide(snap(all, 'nowhere'), { checkpointTriggerTokens: 1 })).toEqual({ kind: 'decline', reason: 'masking-failure' })
-    expect(decide(snap(all, 'u3', { previousCheckpoint: 'x' }), { checkpointTriggerTokens: 1 })).toEqual({
+    expect(decide(snap(all, 'nowhere'), { compactBudgetTokens: 1 })).toEqual({ kind: 'decline', reason: 'masking-failure' })
+    expect(decide(snap(all, 'u3', { previousCheckpoint: 'x' }), { compactBudgetTokens: 1 })).toEqual({
       kind: 'decline',
       reason: 'inconsistent-cursor',
     })

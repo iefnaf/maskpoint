@@ -21,7 +21,7 @@ import { contentBlocks } from './render.js'
 import { regionSnapshot } from './snapshot.js'
 
 /** `BasicCompactionConfig` plus Maskpoint's own row fields (`config.ts`). */
-export type MaskpointDshConfig = BasicCompactionConfig & { enabled?: unknown; checkpointTriggerTokens?: unknown; notificationLevel?: unknown }
+export type MaskpointDshConfig = BasicCompactionConfig & { enabled?: unknown; compactBudgetTokens?: unknown; notificationLevel?: unknown }
 
 /** The envelope a model-free landing records: honest about who wrote the history. */
 export const MASKPOINT_PROVIDER = 'maskpoint'

@@ -12,8 +12,14 @@ import type {
   Outcome,
 } from './vocabulary.js'
 
-/** The initial budget, in estimated tokens. A tuning parameter, not a derived constant (docs/design.md, "Budget"). */
-export const DEFAULT_BUDGET: BudgetPolicy = { checkpointTriggerTokens: 12_000 }
+/**
+ * The budget when nothing better is known, in estimated tokens. A measured tuning parameter, not
+ * a derived constant: it is the flat fallback for hosts that cannot see a model's context window —
+ * 24,000 keeps the mask-only path reachable at real compaction events, where candidate medians
+ * sit near 41k (docs/budget-calibration.md). Adapters that know the window derive instead
+ * (`deriveCompactBudget`).
+ */
+export const DEFAULT_BUDGET: BudgetPolicy = { compactBudgetTokens: 24_000 }
 
 /**
  * The candidate is over budget, or the caller asked for a focus: one checkpoint call should
@@ -98,7 +104,7 @@ export function decide(snapshot: ConversationSnapshot, budget: BudgetPolicy, opt
   }
   // Written as "within budget or not" so that a candidate or a budget that cannot be compared
   // (NaN) lands on the checkpoint path instead of silently passing.
-  const withinBudget = measured.candidateTokens <= budget.checkpointTriggerTokens
+  const withinBudget = measured.candidateTokens <= budget.compactBudgetTokens
   if (!withinBudget) return { kind: 'checkpoint-requested', reason: 'over-budget', fallback: maskedHistory }
   return maskedHistory
 }

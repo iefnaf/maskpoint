@@ -18,8 +18,8 @@ import { type EngineConfig, resolveEngineConfigLayer } from '@maskpoint/core'
  */
 export const MASKPOINT_CONFIG_SCHEMA = Schema.object({
   enabled: Schema.any().description('Enable Maskpoint masking and checkpointing on this row. Defaults to true.'),
-  checkpointTriggerTokens: Schema.any().description(
-    'Token budget before a checkpoint call replaces accumulated masked history. Defaults to 12000.',
+  compactBudgetTokens: Schema.any().description(
+    'Token budget at or below which compacted history is kept as-is with no model call; above it, one checkpoint call. Defaults to 24000.',
   ),
   notificationLevel: Schema.any().description('How much this row logs per compaction: "silent", "normal", or "verbose". Defaults to "normal".'),
 })

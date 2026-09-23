@@ -106,7 +106,8 @@ Maskpoint reads three channels, lowest precedence first:
 2. **The environment** — one variable per setting, for a preference you want on every run:
 
    ```sh
-   export MASKPOINT_CHECKPOINT_TRIGGER_TOKENS=20000   # stop paying for checkpoint calls
+   export MASKPOINT_COMPACT_BUDGET_TOKENS=20000      # keep more compactions free of model calls
+   # (MASKPOINT_CHECKPOINT_TRIGGER_TOKENS still works, with a deprecation warning)
    export MASKPOINT_NOTIFICATION_LEVEL=silent         # quiet notices; a decline still shows
    ```
 
@@ -120,7 +121,7 @@ Maskpoint reads three channels, lowest precedence first:
 | Setting | Environment | Flag | Default |
 |---|---|---|---|
 | `enabled` | `MASKPOINT_ENABLED` | `--maskpoint-enabled` | `true` |
-| `checkpointTriggerTokens` | `MASKPOINT_CHECKPOINT_TRIGGER_TOKENS` | `--maskpoint-checkpoint-trigger-tokens` | `12000` |
+| `compactBudgetTokens` | `MASKPOINT_COMPACT_BUDGET_TOKENS` | `--maskpoint-compact-budget-tokens` | a quarter of the model's window, clamped to [24000, 96000]; `24000` when the window is unknown |
 | `checkpointModel` | `MASKPOINT_CHECKPOINT_MODEL` | `--maskpoint-checkpoint-model` | the session's model |
 | `maskReasoning` | `MASKPOINT_MASK_REASONING` | `--maskpoint-mask-reasoning` | `false` |
 | `notificationLevel` | `MASKPOINT_NOTIFICATION_LEVEL` | `--maskpoint-notification-level` | `normal` |
@@ -129,7 +130,7 @@ Boolean and numeric values are read as text from both channels, where `true`/`fa
 plain non-negative integer are the spellings that parse. Each field is validated on its own: an
 invalid value warns through the UI (when there is one) and leaves the next-more-authoritative layer,
 or the documented default, standing — never a failed compaction. With the settings in hand, the
-behaviour is as described above: raising `checkpointTriggerTokens` moves the same conversation from a
+behaviour is as described above: raising `compactBudgetTokens` moves the same conversation from a
 checkpoint into a mask-only result with no model call, `enabled: false` skips compaction entirely
 (the same as not being installed: no notification, no compaction entry), and
 `notificationLevel: "silent"` suppresses the routine notice while a decline still shows one.

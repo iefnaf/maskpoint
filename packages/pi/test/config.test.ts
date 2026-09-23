@@ -20,7 +20,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       {
         env: {
           MASKPOINT_ENABLED: 'false',
-          MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '20000',
+          MASKPOINT_COMPACT_BUDGET_TOKENS: '20000',
           MASKPOINT_CHECKPOINT_MODEL: 'glm-4.6',
           MASKPOINT_MASK_REASONING: 'true',
           MASKPOINT_NOTIFICATION_LEVEL: 'verbose',
@@ -30,7 +30,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
     )
     expect(config).toEqual({
       enabled: false,
-      checkpointTriggerTokens: 20_000,
+      compactBudgetTokens: 20_000,
       checkpointModel: 'glm-4.6',
       maskReasoning: true,
       notificationLevel: 'verbose',
@@ -44,7 +44,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       {
         flags: {
           enabled: true,
-          checkpointTriggerTokens: '9000',
+          compactBudgetTokens: '9000',
           checkpointModel: 'glm-4.6',
           maskReasoning: true,
           notificationLevel: 'silent',
@@ -54,7 +54,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
     )
     expect(config).toEqual({
       enabled: true,
-      checkpointTriggerTokens: 9_000,
+      compactBudgetTokens: 9_000,
       checkpointModel: 'glm-4.6',
       maskReasoning: true,
       notificationLevel: 'silent',
@@ -72,40 +72,61 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
     const { warn } = collecting()
     const config = loadConfig(
       {
-        host: { checkpointTriggerTokens: 5_000, notificationLevel: 'verbose' },
-        env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '20_000' },
-        flags: { checkpointTriggerTokens: '9000', notificationLevel: 'silent' },
+        host: { compactBudgetTokens: 5_000, notificationLevel: 'verbose' },
+        env: { MASKPOINT_COMPACT_BUDGET_TOKENS: '20_000' },
+        flags: { compactBudgetTokens: '9000', notificationLevel: 'silent' },
       },
       warn,
     )
-    expect(config.checkpointTriggerTokens).toBe(9_000)
+    expect(config.compactBudgetTokens).toBe(9_000)
     expect(config.notificationLevel).toBe('silent')
   })
 
   it('passes an unparsable value to the core, which warns about it by channel name and keeps the default', () => {
     const { warned, warn } = collecting()
-    const config = loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: 'lots' } }, warn)
+    const config = loadConfig({ env: { MASKPOINT_COMPACT_BUDGET_TOKENS: 'lots' } }, warn)
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
-    expect(warned).toEqual(['invalid environment value for "checkpointTriggerTokens" ("lots"); ignoring it'])
+    expect(warned).toEqual(['invalid environment value for "compactBudgetTokens" ("lots"); ignoring it'])
   })
 
   it('warns about a zero or negative budget rather than accepting it, since only a positive integer is a budget', () => {
     const { warned, warn } = collecting()
-    expect(loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '0' } }, warn).checkpointTriggerTokens).toBe(12_000)
-    expect(loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '-5' } }, warn).checkpointTriggerTokens).toBe(12_000)
+    expect(loadConfig({ env: { MASKPOINT_COMPACT_BUDGET_TOKENS: '0' } }, warn).compactBudgetTokens).toBe(24_000)
+    expect(loadConfig({ env: { MASKPOINT_COMPACT_BUDGET_TOKENS: '-5' } }, warn).compactBudgetTokens).toBe(24_000)
     expect(warned).toHaveLength(2)
   })
 
   it('keeps the flag that wins when a losing flag is invalid', () => {
     const { warned, warn } = collecting()
-    const config = loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '9000' }, flags: { checkpointTriggerTokens: '9000.5' } }, warn)
-    expect(config.checkpointTriggerTokens).toBe(9_000)
-    expect(warned).toEqual(['invalid flag value for "checkpointTriggerTokens" ("9000.5"); ignoring it'])
+    const config = loadConfig({ env: { MASKPOINT_COMPACT_BUDGET_TOKENS: '9000' }, flags: { compactBudgetTokens: '9000.5' } }, warn)
+    expect(config.compactBudgetTokens).toBe(9_000)
+    expect(warned).toEqual(['invalid flag value for "compactBudgetTokens" ("9000.5"); ignoring it'])
+  })
+
+  it('maps the deprecated budget variable onto the field, warns, and lets the modern name win', () => {
+    const { warned, warn } = collecting()
+    const config = loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '30000' } }, warn)
+    expect(config.compactBudgetTokens).toBe(30_000)
+    expect(warned).toEqual(['MASKPOINT_CHECKPOINT_TRIGGER_TOKENS is deprecated; use MASKPOINT_COMPACT_BUDGET_TOKENS'])
+
+    const both = loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '30000', MASKPOINT_COMPACT_BUDGET_TOKENS: '40000' } }, warn)
+    expect(both.compactBudgetTokens).toBe(40_000)
+  })
+
+  it('derives the budget from the model window when no channel set it, and an explicit channel wins over the window', () => {
+    const { warn } = collecting()
+    expect(loadConfig({ contextWindow: 200_000 }, warn).compactBudgetTokens).toBe(50_000)
+    expect(loadConfig({ contextWindow: 1_000_000 }, warn).compactBudgetTokens).toBe(96_000) // the ceiling binds
+    expect(loadConfig({ contextWindow: 64_000 }, warn).compactBudgetTokens).toBe(24_000) // the floor binds
+    expect(loadConfig({ env: { MASKPOINT_COMPACT_BUDGET_TOKENS: '9000' }, contextWindow: 200_000 }, warn).compactBudgetTokens).toBe(9_000)
+    expect(loadConfig({ env: { MASKPOINT_CHECKPOINT_TRIGGER_TOKENS: '8000' }, contextWindow: 200_000 }, warn).compactBudgetTokens).toBe(8_000)
   })
 
   it('says nothing about a flag that was not passed, and nothing about an absent environment', () => {
     const { warned, warn } = collecting()
-    const config = loadConfig({ flags: readFlags(() => undefined), env: undefined }, warn)
+    const read = readFlags(() => undefined)
+    expect(read.deprecations).toEqual([])
+    const config = loadConfig({ flags: read.values, env: undefined }, warn)
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
     expect(warned).toEqual([])
   })
@@ -119,11 +140,12 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
 })
 
 describe('flagSpecs', () => {
-  it('names one flag per setting, each with a description an operator can act on', () => {
+  it('names one flag per setting, each with a description an operator can act on, plus the deprecated renames', () => {
     const specs = flagSpecs()
     expect(specs.map((spec) => spec.name).sort()).toEqual([
       'maskpoint-checkpoint-model',
       'maskpoint-checkpoint-trigger-tokens',
+      'maskpoint-compact-budget-tokens',
       'maskpoint-enabled',
       'maskpoint-mask-reasoning',
       'maskpoint-notification-level',
@@ -146,16 +168,30 @@ describe('flagSpecs', () => {
 describe('readFlags', () => {
   it('reads each setting through the name its spec registered, and reports the unset ones as unset', () => {
     const asked: string[] = []
-    const values = readFlags((name) => {
+    const { values, deprecations } = readFlags((name) => {
       asked.push(name)
       return name === 'maskpoint-notification-level' ? 'silent' : undefined
     })
-    expect(asked).toEqual(flagSpecs().map((spec) => spec.name))
+    expect([...asked].sort()).toEqual(flagSpecs().map((spec) => spec.name).sort())
     expect(values).toEqual({
       enabled: undefined,
-      checkpointTriggerTokens: undefined,
+      compactBudgetTokens: undefined,
       checkpointModel: undefined,
       notificationLevel: 'silent',
     })
+    expect(deprecations).toEqual([])
+  })
+
+  it('maps a deprecated budget flag onto the field it renamed, and says so; the modern name wins', () => {
+    const modern = readFlags((name) => (name === 'maskpoint-compact-budget-tokens' ? '30000' : undefined))
+    expect(modern.values.compactBudgetTokens).toBe('30000')
+    expect(modern.deprecations).toEqual([])
+
+    const legacy = readFlags((name) => (name === 'maskpoint-checkpoint-trigger-tokens' ? '30000' : undefined))
+    expect(legacy.values.compactBudgetTokens).toBe('30000')
+    expect(legacy.deprecations).toEqual(['--maskpoint-checkpoint-trigger-tokens is deprecated; use --maskpoint-compact-budget-tokens'])
+
+    const both = readFlags((name) => (name === 'maskpoint-compact-budget-tokens' || name === 'maskpoint-checkpoint-trigger-tokens' ? '30000' : undefined))
+    expect(both.deprecations).toEqual([])
   })
 })

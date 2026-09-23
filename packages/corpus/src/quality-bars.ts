@@ -11,7 +11,7 @@ import type { CorpusFixture } from './corpus.js'
 import { modelDouble, responses, type Script } from './model-double.js'
 
 /** Forces the checkpoint path regardless of a fixture's tiny size, to exercise every rejection shape. */
-const TINY_BUDGET: BudgetPolicy = { checkpointTriggerTokens: 1 }
+const TINY_BUDGET: BudgetPolicy = { compactBudgetTokens: 1 }
 
 function deps(script: Script): EngineDeps {
   return {
