@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
@@ -14,6 +17,7 @@ type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResu
 function load(flags: Record<string, string> = {}) {
   const handlers = new Map<string, Handler>()
   const registered: string[] = []
+  const commands = new Map<string, (args: string, ctx: PiContext) => unknown | Promise<unknown>>()
   const values = new Map(Object.entries(flags))
   let loaded = false
   const pi: PiExtensionApi = {
@@ -23,11 +27,14 @@ function load(flags: Record<string, string> = {}) {
     registerFlag: (name) => {
       registered.push(name)
     },
+    registerCommand: (name, options) => {
+      commands.set(name, options.handler)
+    },
     getFlag: (name) => (loaded ? values.get(name) : undefined),
   }
   maskpoint(pi)
   loaded = true
-  return { handlers, registered }
+  return { handlers, registered, commands }
 }
 
 const handler = (flags?: Record<string, string>) => {
@@ -50,6 +57,30 @@ describe('the extension', () => {
       'maskpoint-notification-level',
       'maskpoint-checkpoint-trigger-tokens',
     ])
+  })
+
+  it('registers one /maskpoint command, and a stored setting it writes applies to the very next compaction', async () => {
+    vi.stubEnv('MASKPOINT_CONFIG', join(tmpdir(), `maskpoint-cmd-${process.pid}-${Date.now()}.json`))
+    const { commands, handlers } = load()
+    const command = commands.get('maskpoint')
+    expect(command).toBeDefined()
+
+    const ctx = fakeContext(true)
+    await command!('reasoning on', ctx)
+    expect(ctx.notes[0]?.message).toMatch(/stored, applies to the next compaction/)
+
+    // The same process, the next compaction: the stored file is read at compaction time, so the
+    // reasoning blocks in the fixture below are masked with no restart and no environment.
+    vi.unstubAllEnvs()
+    const entries = [
+      user('u1', 'Go.'),
+      assistant('a1', [thinking('I should read the file first, then edit it carefully.'), toolCall('c1', 'read', { path: '/w/a.ts' })]),
+      toolResult('r1', 'c1', 'read', bulky('BODY')),
+      user('u2', 'Thanks.'),
+      assistant('a2', [text('Done.')]),
+    ]
+    const result = await handlers.get('session_before_compact')!(beforeCompact(entries, 'u2'), fakeContext())
+    expect(result?.compaction.details).toMatchObject({ strategy: 'mask', stats: { reasoningsMasked: 1 } })
   })
 
   it('returns a compaction whose cut point and token count are exactly the ones Pi prepared', async () => {

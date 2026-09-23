@@ -1,4 +1,4 @@
-import { deriveCompactBudget, type EngineConfig, resolveEngineConfigLayers } from '@maskpoint/core'
+import { DEFAULT_ENGINE_CONFIG, deriveCompactBudget, type EngineConfig, resolveEngineConfigLayers } from '@maskpoint/core'
 
 /**
  * Maskpoint's settings for Pi, and the channels they arrive through.
@@ -29,6 +29,8 @@ export interface PiConfigSources {
   readonly env?: Readonly<Record<string, string | undefined>> | undefined
   /** This run's values for the extension's own CLI flags, keyed by config field. Unset flags are absent. */
   readonly flags?: Readonly<Partial<Record<keyof EngineConfig, unknown>>> | undefined
+  /** The extension-owned settings file (`/maskpoint` writes it), as raw JSON. Absent when there is none. */
+  readonly stored?: unknown
   /** The session model's context window, when known. Drives the compact-budget default. */
   readonly contextWindow?: number | undefined
 }
@@ -178,29 +180,61 @@ function hostExplicit(host: unknown): Set<string> {
 }
 const DEPRECATED_KEY_ALIASES: Readonly<Record<string, string>> = { checkpointTriggerTokens: 'compactBudgetTokens' }
 
+/** Every field, for provenance walks. */
+const ALL_FIELDS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
+
+/** How each layer names itself when `/maskpoint` reports where a value came from. */
+const LAYER_NAMES: readonly string[] = ['host configuration', 'stored configuration', 'environment', 'flag']
+
+/** The resolved config plus, for each field a layer set, which layer that was. */
+export interface ConfigWithOrigin {
+  readonly config: EngineConfig
+  readonly origin: Readonly<Partial<Record<keyof EngineConfig, string>>>
+}
+
 /**
- * Resolve Maskpoint's settings from every channel this host offers, warning through the given
- * callback. When no channel set the budget and the session's model window is known, the budget is
- * derived from it (`deriveCompactBudget`); a window of `undefined` leaves the documented flat
- * default standing.
+ * Resolve Maskpoint's settings from every channel this host offers — the host's own object, the
+ * extension's stored file, the environment, and this run's flags — warning through the given
+ * callback, and reporting which layer each effective value came from. When no channel set the
+ * budget and the session's model window is known, the budget is derived from it
+ * (`deriveCompactBudget`); a window of `undefined` leaves the documented flat default standing.
  */
-export function loadConfig(sources: PiConfigSources, warn: (message: string) => void): EngineConfig {
+export function resolveConfig(sources: PiConfigSources, warn: (message: string) => void): ConfigWithOrigin {
   const environment = fromEnvironment(sources.env)
   for (const message of environment.deprecations) warn(message)
   const flagsRaw = fromFlags(sources.flags)
-  const resolved = resolveEngineConfigLayers(
-    [
-      { source: 'host', raw: sources.host },
-      { source: 'environment', raw: environment.raw },
-      { source: 'flag', raw: flagsRaw },
-    ],
-    warn,
-  )
+  const layers: readonly { source: string; raw: unknown }[] = [
+    { source: 'host', raw: sources.host },
+    { source: 'stored', raw: sources.stored },
+    { source: 'environment', raw: environment.raw },
+    { source: 'flag', raw: flagsRaw },
+  ]
+
+  // Provenance by cumulative diff: a field belongs to the first layer that changed it away from
+  // what stood before. The partial resolutions swallow their warnings; the full one below emits.
+  const origin: Partial<Record<keyof EngineConfig, string>> = {}
+  let previous: EngineConfig = { ...DEFAULT_ENGINE_CONFIG }
+  for (let i = 0; i < layers.length; i++) {
+    const partial = resolveEngineConfigLayers(layers.slice(0, i + 1), () => {})
+    for (const field of ALL_FIELDS) if (partial[field] !== previous[field]) origin[field] = LAYER_NAMES[i]!
+    previous = partial
+  }
+  const resolved = resolveEngineConfigLayers(layers, warn)
+
   const budgetExplicit = environment.explicit.has('compactBudgetTokens')
     || flagsRaw.compactBudgetTokens !== undefined
     || hostExplicit(sources.host).has('compactBudgetTokens')
+    || hostExplicit(sources.stored).has('compactBudgetTokens')
   if (!budgetExplicit && sources.contextWindow !== undefined) {
-    return { ...resolved, compactBudgetTokens: deriveCompactBudget(sources.contextWindow) }
+    return {
+      config: { ...resolved, compactBudgetTokens: deriveCompactBudget(sources.contextWindow) },
+      origin: { ...origin, compactBudgetTokens: 'derived from the model window' },
+    }
   }
-  return resolved
+  return { config: resolved, origin }
+}
+
+/** `resolveConfig` without the provenance, for callers that only run the engine. */
+export function loadConfig(sources: PiConfigSources, warn: (message: string) => void): EngineConfig {
+  return resolveConfig(sources, warn).config
 }

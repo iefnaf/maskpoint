@@ -96,10 +96,36 @@ note on why no checkpoint ran.
 
 ## Configuration
 
-Pi gives an extension no settings of its own: a real release supplies no `config` on the handler's
-context — only its own `{ enabled, reserveTokens, keepRecentTokens }` at `event.preparation.settings`
-— and unknown keys in `settings.json` are dropped before a hook ever sees them (issue #39). So
-Maskpoint reads three channels, lowest precedence first:
+The interactive surface is the **`/maskpoint` command**: typed with no arguments it opens a
+settings menu — every current value in the labels, pick one to change, pick the new value, repeat
+or press Esc to finish. Nothing to remember, nothing written on dismissal:
+
+```
+❯ Maskpoint settings — pick one to change (Esc to finish)
+  mask-reasoning: off
+  budget: 96000 (derived from the model window)
+  checkpoint-model: the session model
+  notify: normal
+  enabled: on
+  reset stored settings
+  done
+```
+
+Changes are stored in an extension-owned file (`~/.pi/agent/maskpoint.json`) that the next
+compaction reads, so they apply with **no restart**. Typed subcommands do the same thing for
+scripts and muscle memory:
+
+```
+/maskpoint reasoning on|off       mask assistant reasoning as well as observations
+/maskpoint budget <tokens>|auto   compact budget; "auto" follows the model window
+/maskpoint model <id>|default     model for the checkpoint call
+/maskpoint notify silent|normal|verbose
+/maskpoint enabled on|off
+/maskpoint reset                  clear every stored setting
+```
+
+Pi gives an extension no settings of its own (issue #39), so for scripting there are also three
+more channels, lowest precedence first:
 
 1. **The host object** — `PiContext.config`, if a future Pi release ever supplies one. Kept first so
    that day needs no change here.
@@ -114,9 +140,12 @@ Maskpoint reads three channels, lowest precedence first:
 3. **This extension's CLI flags** — they appear in `pi --help` and win for the run they were typed on:
 
    ```sh
-   pi --maskpoint-checkpoint-trigger-tokens 20000
+   pi --maskpoint-compact-budget-tokens 20000
    pi --maskpoint-enabled false
    ```
+
+Anything `/maskpoint` stored sits below both, so a shell variable or a per-run flag can always
+override it for one launch. `MASKPOINT_CONFIG` points the stored file elsewhere, for profiles.
 
 | Setting | Environment | Flag | Default |
 |---|---|---|---|

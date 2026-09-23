@@ -12,7 +12,7 @@ import { buildPiEvent } from './pi-encoding.js'
 function fakePiContext(): PiContext {
   return {
     hasUI: false,
-    ui: { notify: () => {} },
+    ui: { notify: () => {}, select: () => Promise.resolve(undefined), input: () => Promise.resolve(undefined) },
     model: undefined,
     modelRegistry: { complete: () => Promise.reject(new Error('host-runs: no checkpoint call is expected in this harness')) },
   }
