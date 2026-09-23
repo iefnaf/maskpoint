@@ -41,6 +41,14 @@ const FIELDS: Readonly<Record<string, FieldSpec>> = {
       return { accepted: true, value: tokens }
     },
   },
+  checkpoint: {
+    key: 'checkpointEnabled',
+    words: 'checkpoint',
+    set: (value) => {
+      const parsed = boolean(value)
+      return parsed === undefined ? { accepted: false, reason: 'use "on" or "off"' } : { accepted: true, value: parsed }
+    },
+  },
   model: {
     key: 'checkpointModel',
     words: 'checkpoint-model',
@@ -73,6 +81,7 @@ const USAGE = [
   '  /maskpoint                        open the interactive settings menu',
   '  /maskpoint reasoning on|off       mask assistant reasoning as well as observations',
   '  /maskpoint budget <tokens>|auto   compact budget; "auto" follows the model window',
+  '  /maskpoint checkpoint on|off       the one model call a compaction can make; off keeps every compaction model-free',
   '  /maskpoint model <id>|default     model for the checkpoint call',
   '  /maskpoint notify silent|normal|verbose',
   '  /maskpoint enabled on|off',
@@ -87,6 +96,7 @@ export function renderShow(config: EngineConfig, origin: Readonly<Partial<Record
     'Maskpoint settings:',
     line('enabled', config.enabled ? 'on' : 'off', origin.enabled),
     line('budget', String(config.compactBudgetTokens), origin.compactBudgetTokens),
+    line('checkpoint', config.checkpointEnabled ? 'on' : 'off', origin.checkpointEnabled),
     line('mask-reasoning', config.maskReasoning ? 'on' : 'off', origin.maskReasoning),
     line('checkpoint-model', config.checkpointModel ?? 'the session model', origin.checkpointModel),
     line('notify', config.notificationLevel, origin.notificationLevel),
@@ -147,6 +157,7 @@ async function runWizard(store: StoredConfig, resolve: () => Resolved, ui: Wizar
       [
         `mask-reasoning: ${config.maskReasoning ? 'on' : 'off'}${source('maskReasoning')}`,
         `budget: ${config.compactBudgetTokens}${source('compactBudgetTokens')}`,
+        `checkpoint: ${config.checkpointEnabled ? 'on' : 'off'}${source('checkpointEnabled')}`,
         `checkpoint-model: ${config.checkpointModel ?? 'the session model'}${source('checkpointModel')}`,
         `notify: ${config.notificationLevel}${source('notificationLevel')}`,
         `enabled: ${config.enabled ? 'on' : 'off'}${source('enabled')}`,
@@ -193,6 +204,9 @@ async function runWizard(store: StoredConfig, resolve: () => Resolved, ui: Wizar
       const trimmed = typed.trim()
       if (trimmed === '' || trimmed === 'default') last = applyField(FIELDS.model!, 'model', 'default', store, { accepted: true, remove: true }, ui.notify)
       else last = applyField(FIELDS.model!, 'model', trimmed, store, FIELDS.model!.set(trimmed) as { accepted: true; value: unknown }, ui.notify)
+    } else if (choice.startsWith('checkpoint:')) {
+      const value = await ui.select('checkpoint — the one model call a compaction can make; off keeps every compaction model-free', ['on', 'off'])
+      if (value !== undefined) last = applyField(FIELDS.checkpoint!, 'checkpoint', value, store, { accepted: true, value: value === 'on' }, ui.notify)
     } else if (choice.startsWith('notify:')) {
       const value = await ui.select('notification level', ['silent', 'normal', 'verbose'])
       if (value !== undefined) last = applyField(FIELDS.notify!, 'notify', value, store, { accepted: true, value }, ui.notify)

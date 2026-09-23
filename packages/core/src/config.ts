@@ -18,6 +18,13 @@ export interface EngineConfig {
   /** A registered model id to use for the checkpoint call instead of the session's own. */
   readonly checkpointModel?: string
   /**
+   * When false, a compaction never makes its one checkpoint call: an over-budget candidate stays
+   * masked history however large, and a manual focus request degrades to the same fallback. The
+   * budget still governs nothing but is kept honest in `/maskpoint`'s listing. Off trades context
+   * size for latency — the call is the only step that can stall a compaction.
+   */
+  readonly checkpointEnabled: boolean
+  /**
    * Mask assistant reasoning as well as observations (`MaskOptions.maskReasoning`). Off by default:
    * the design promises reasoning verbatim, and the one measurement of the trade-off
    * (`docs/reasoning-masking-evaluation.md`) left the checkpoint path untested.
@@ -30,6 +37,7 @@ export interface EngineConfig {
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   enabled: true,
   compactBudgetTokens: DEFAULT_BUDGET.compactBudgetTokens,
+  checkpointEnabled: true,
   maskReasoning: false,
   notificationLevel: 'normal',
 }
@@ -45,7 +53,7 @@ export interface ConfigResolution {
   readonly warnings: readonly ConfigWarning[]
 }
 
-const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
+const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'checkpointEnabled', 'maskReasoning', 'notificationLevel']
 
 /**
  * Pre-renames of `EngineConfig` keys, still accepted in any layer and mapped onto their current
@@ -93,6 +101,10 @@ function applyLayer(raw: unknown, source: string, into: { -readonly [K in keyof 
         break
       case 'checkpointModel':
         if (typeof value === 'string' && value.trim() !== '') into.checkpointModel = value
+        else invalid()
+        break
+      case 'checkpointEnabled':
+        if (typeof value === 'boolean') into.checkpointEnabled = value
         else invalid()
         break
       case 'maskReasoning':

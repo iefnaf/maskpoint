@@ -1,13 +1,20 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from '../src/host.js'
 import { firstTurn } from './support/scenario.js'
 import { assistant, beforeCompact, bulky, fakeContext, modelReply, text, thinking, toolCall, toolResult, usageOf, user } from './support/session.js'
 
 type Handler = (event: PiBeforeCompactEvent, ctx: PiContext) => PiCompactionResult | undefined | Promise<PiCompactionResult | undefined>
+
+// Every test in this file must see the same empty stored config: without this the extension reads
+// the developer's real ~/.pi/agent/maskpoint.json, and a setting there (a lowered budget, masked
+// reasoning) silently flips behaviour tests that were written against the defaults.
+beforeEach(() => {
+  vi.stubEnv('MASKPOINT_CONFIG', join(tmpdir(), `maskpoint-ext-${process.pid}-${Date.now()}.json`))
+})
 
 /**
  * Load the extension into a stand-in for Pi and hand back what it subscribed to. `flags` seeds the
@@ -53,6 +60,7 @@ describe('the extension', () => {
       'maskpoint-enabled',
       'maskpoint-compact-budget-tokens',
       'maskpoint-checkpoint-model',
+      'maskpoint-checkpoint-enabled',
       'maskpoint-mask-reasoning',
       'maskpoint-notification-level',
       'maskpoint-checkpoint-trigger-tokens',

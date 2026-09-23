@@ -134,6 +134,7 @@ Because the engine is shared, the same masking rules, budget policy, checkpoint 
 71. As a user, I want a global Maskpoint configuration, so that defaults apply across projects.
 72. As a user, I want per-project configuration to override global settings only in trusted projects, so that an untrusted repository cannot choose my model or alter my compaction behavior.
 73. As a user, I want to disable Maskpoint per project and globally, so that I can fall back to the host's own behavior.
+73a. As a user, I want to refuse the checkpoint call while keeping Maskpoint's masking, so that a compaction never waits on a model — however far over budget the candidate is.
 74. As a user, I want invalid configuration rejected with a clear warning and safe defaults, so that a typo cannot corrupt session context.
 75. As a user, I want configuration mapped onto each host's native config location, so that I do not manage a fifth config system.
 

@@ -105,7 +105,11 @@ export default function maskpoint(pi: PiExtensionApi): void {
     if (!config.enabled) return undefined
 
     const budget = budgetOf(config)
-    const effect = await planCompaction(event, ctx, { budget, maskOptions: maskOptionsOf(config) })
+    const effect = await planCompaction(event, ctx, {
+      budget,
+      maskOptions: maskOptionsOf(config),
+      checkpointEnabled: config.checkpointEnabled,
+    })
     report(ctx, effect, config.notificationLevel)
     return effect.kind === 'native' ? toPiResult(effect) : undefined
   })

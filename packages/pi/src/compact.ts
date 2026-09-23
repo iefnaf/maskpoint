@@ -14,6 +14,7 @@ import {
   type ModelResponse,
   payloadOf,
   run,
+  runMaskOnly,
   type Usage,
 } from '@maskpoint/core'
 import type { PiAssistantMessage, PiBeforeCompactEvent, PiCompactionResult, PiContext, PiUsage } from './host.js'
@@ -150,21 +151,31 @@ function buildDeps(event: PiBeforeCompactEvent, ctx: PiContext, record: (usage: 
   }
 }
 
-async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetPolicy, maskOptions: MaskOptions): Promise<PiEffect> {
+async function plan(
+  event: PiBeforeCompactEvent,
+  ctx: PiContext,
+  budget: BudgetPolicy,
+  maskOptions: MaskOptions,
+  checkpointEnabled: boolean,
+): Promise<PiEffect> {
   const snapshot = buildSnapshot(event)
   if (isDecline(snapshot)) return decline(snapshot.reason, snapshot.note)
 
   // Captured out of the one checkpoint call, if one is made: the engine's own `Usage` is
   // deliberately host-free, and Pi needs the provider's fuller object back.
   let piUsage: PiUsage | undefined
-  const outcome = await run(
-    snapshot,
-    budget,
-    buildDeps(event, ctx, (usage) => {
-      piUsage = usage
-    }),
-    maskOptions,
-  )
+  // `checkpointEnabled: false` takes the call — the only step that can stall a compaction — off
+  // the table entirely; the masked-history fallback then stands whatever the budget says.
+  const outcome = checkpointEnabled
+    ? await run(
+        snapshot,
+        budget,
+        buildDeps(event, ctx, (usage) => {
+          piUsage = usage
+        }),
+        maskOptions,
+      )
+    : runMaskOnly(snapshot, budget, maskOptions)
   if (outcome.kind === 'decline') return decline(outcome.reason)
 
   const summary = summaryRenderer.render(outcome.artifact)
@@ -194,10 +205,10 @@ async function plan(event: PiBeforeCompactEvent, ctx: PiContext, budget: BudgetP
 export async function planCompaction(
   event: PiBeforeCompactEvent,
   ctx: PiContext,
-  options: { budget?: BudgetPolicy; maskOptions?: MaskOptions } = {},
+  options: { budget?: BudgetPolicy; maskOptions?: MaskOptions; checkpointEnabled?: boolean } = {},
 ): Promise<PiEffect> {
   try {
-    return await plan(event, ctx, options.budget ?? DEFAULT_BUDGET, options.maskOptions ?? {})
+    return await plan(event, ctx, options.budget ?? DEFAULT_BUDGET, options.maskOptions ?? {}, options.checkpointEnabled ?? true)
   } catch (error) {
     return decline('engine-failure', error instanceof Error ? error.message : String(error))
   }
