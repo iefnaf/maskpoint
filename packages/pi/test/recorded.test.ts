@@ -1,11 +1,19 @@
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { planCompaction } from '../src/compact.js'
 import maskpoint from '../src/extension.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext } from '../src/host.js'
 import { buildSnapshot, isDecline } from '../src/snapshot.js'
 import { native } from './support/scenario.js'
+
+// This file drives the real extension factory, which reads MASKPOINT_CONFIG (defaulting to the
+// developer's own ~/.pi/agent/maskpoint.json): without isolation a local checkpointEnabled:false
+// or masked-reasoning setting silently rewrites what these recorded payloads prove.
+beforeEach(() => {
+  vi.stubEnv('MASKPOINT_CONFIG', join(tmpdir(), `maskpoint-rec-${process.pid}-${Date.now()}.json`))
+})
 import { fakeContext, modelReply } from './support/session.js'
 
 /**

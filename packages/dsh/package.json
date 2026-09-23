@@ -1,6 +1,6 @@
 {
   "name": "@maskpoint/dsh",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Maskpoint as a DSH compaction backend: observation masking behind the host's compaction seam.",
   "license": "MIT",
   "repository": {
@@ -36,7 +36,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@maskpoint/core": "^0.2.0"
+    "@maskpoint/core": "^0.3.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
