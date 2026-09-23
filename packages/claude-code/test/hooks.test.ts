@@ -100,13 +100,13 @@ describe('configuration (issue #8)', () => {
   })
 
   it('lowering the checkpoint budget changes the strategy from within-budget to over-budget, end to end', () => {
-    const under = scenario({ config: { checkpointTriggerTokens: 1_000_000 } })
+    const under = scenario({ config: { compactBudgetTokens: 1_000_000 } })
     under.writeTranscript(SESSION)
     under.preCompact()
     expect(JSON.parse(under.stateFile('sess-0001.json')).detail.strategy).toBe('mask')
     expect(under.logs.at(-1)).not.toContain('over budget')
 
-    const over = scenario({ config: { checkpointTriggerTokens: 1 } })
+    const over = scenario({ config: { compactBudgetTokens: 1 } })
     over.writeTranscript(SESSION)
     over.preCompact()
     expect(over.logs.some((line) => line.includes('over budget'))).toBe(true)

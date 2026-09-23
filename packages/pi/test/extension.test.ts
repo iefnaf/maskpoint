@@ -44,10 +44,11 @@ describe('the extension', () => {
   it('registers its settings as CLI flags, so `pi --help` can list them', () => {
     expect(load().registered).toEqual([
       'maskpoint-enabled',
-      'maskpoint-checkpoint-trigger-tokens',
+      'maskpoint-compact-budget-tokens',
       'maskpoint-checkpoint-model',
       'maskpoint-mask-reasoning',
       'maskpoint-notification-level',
+      'maskpoint-checkpoint-trigger-tokens',
     ])
   })
 
@@ -115,6 +116,9 @@ describe('what the user is told', () => {
       assistant('a2', [text('Welcome.')]),
     ]
     const ctx = fakeContext()
+    // An explicit small budget, so the fixture's ~19k-token candidate is over it whatever the
+    // default is (issue #46 made the default 24k, which would keep this fixture mask-only).
+    vi.stubEnv('MASKPOINT_COMPACT_BUDGET_TOKENS', '12000')
     const result = await handler()(beforeCompact(entries, 'u2'), ctx)
     expect(result).toBeDefined()
     expect(ctx.notes[0]?.message).toMatch(/checkpoint/i)
@@ -169,7 +173,7 @@ describe('configuration (issues #8 and #39)', () => {
   })
 
   it('lowering the checkpoint budget in ctx.config turns a masked-history result into a checkpoint', async () => {
-    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    const ctx = fakeContext(true, { compactBudgetTokens: 1 })
     ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result?.compaction.details).toMatchObject({ strategy: 'checkpoint' })
@@ -192,15 +196,15 @@ describe('configuration (issues #8 and #39)', () => {
   })
 
   it('warns through the UI and falls back to the default when ctx.config is invalid, instead of throwing', async () => {
-    const ctx = fakeContext(true, { checkpointTriggerTokens: -1 })
+    const ctx = fakeContext(true, { compactBudgetTokens: -1 })
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result).toBeDefined()
     expect(ctx.notes[0]).toMatchObject({ level: 'warning' })
-    expect(ctx.notes[0]?.message).toMatch(/checkpointTriggerTokens/)
+    expect(ctx.notes[0]?.message).toMatch(/compactBudgetTokens/)
   })
 
   it('reads a setting from the environment, since Pi itself supplies none', async () => {
-    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '1')
+    vi.stubEnv('MASKPOINT_COMPACT_BUDGET_TOKENS', '1')
     const ctx = fakeContext()
     ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
@@ -210,30 +214,30 @@ describe('configuration (issues #8 and #39)', () => {
   it('reads a setting from its own CLI flag', async () => {
     const ctx = fakeContext()
     ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint')) }
-    const result = await handler({ 'maskpoint-checkpoint-trigger-tokens': '1' })(beforeCompact(firstTurn(), 'u2'), ctx)
+    const result = await handler({ 'maskpoint-compact-budget-tokens': '1' })(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result?.compaction.details).toMatchObject({ strategy: 'checkpoint' })
   })
 
   it('lets a flag typed for this run win over the environment, field by field', async () => {
-    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '1')
-    const result = await handler({ 'maskpoint-checkpoint-trigger-tokens': '20000' })(beforeCompact(firstTurn(), 'u2'), fakeContext())
+    vi.stubEnv('MASKPOINT_COMPACT_BUDGET_TOKENS', '1')
+    const result = await handler({ 'maskpoint-compact-budget-tokens': '20000' })(beforeCompact(firstTurn(), 'u2'), fakeContext())
     expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
   })
 
   it('lets the environment win over whatever the host passes in ctx.config', async () => {
-    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', '20000')
-    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    vi.stubEnv('MASKPOINT_COMPACT_BUDGET_TOKENS', '20000')
+    const ctx = fakeContext(true, { compactBudgetTokens: 1 })
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
   })
 
   it('names the channel in the warning when a value from it is invalid', async () => {
-    vi.stubEnv('MASKPOINT_CHECKPOINT_TRIGGER_TOKENS', 'lots')
+    vi.stubEnv('MASKPOINT_COMPACT_BUDGET_TOKENS', 'lots')
     const ctx = fakeContext()
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result?.compaction.details).toMatchObject({ strategy: 'mask' })
     expect(ctx.notes[0]).toMatchObject({ level: 'warning' })
-    expect(ctx.notes[0]?.message).toMatch(/invalid environment value for "checkpointTriggerTokens"/)
+    expect(ctx.notes[0]?.message).toMatch(/invalid environment value for "compactBudgetTokens"/)
   })
 
   it('can be disabled from a flag, exactly as ctx.config can disable it', async () => {
@@ -287,7 +291,7 @@ describe('masking assistant reasoning (issue #43)', () => {
 describe('the checkpoint usage Pi records (issue #40)', () => {
   it('hands Pi the provider\'s own usage object, cost included', async () => {
     const usage = usageOf(321, 65, { cost: { input: 0.01, output: 0.02, cacheRead: 0, cacheWrite: 0, total: 0.03 } })
-    const ctx = fakeContext(true, { checkpointTriggerTokens: 1 })
+    const ctx = fakeContext(true, { compactBudgetTokens: 1 })
     ctx.modelRegistry = { complete: () => Promise.resolve(modelReply('a checkpoint', { usage })) }
     const result = await handler()(beforeCompact(firstTurn(), 'u2'), ctx)
     expect(result?.compaction.usage).toBe(usage)

@@ -74,7 +74,7 @@ reads:
   name: '@maskpoint/dsh'
   config:
     enabled: true
-    checkpointTriggerTokens: 12000
+    compactBudgetTokens: 24000
     maskReasoning: false
     notificationLevel: normal
     # host fields, unchanged: thresholdRatio, retainRatio/retainTokens, summarizationProvider,
@@ -84,7 +84,7 @@ reads:
 - `enabled: false` makes both `compactIfNeeded` and `summarize` delegate straight to `super` — the
   unmodified built-in backend this class extends, with no masking, no checkpoint, and nothing of
   Maskpoint's left in session state.
-- `checkpointTriggerTokens` is `decide()`'s budget for the explicit paths (`/compact`, region
+- `compactBudgetTokens` is `decide()`'s budget for the explicit paths (`/compact`, region
   compaction): lower it and the same conversation crosses from a masked-history landing into a
   checkpoint call.
 - `maskReasoning: true` masks assistant reasoning as well as observations, each becoming
@@ -141,8 +141,8 @@ each entry lands are asserted, so a host release that changes the protocol fails
 3. Confirm the session log shows `compaction/prune` + `tool/result` pairs and no `compaction/summary`.
 4. Run `/compact` on an idle session with modest history; confirm a `compaction/summary` with
    provider `maskpoint`, model `mask-only`, no usage.
-5. Repeat `/compact` after enough turns that the accumulated masked history passes the 12,000-token
-   checkpoint budget (or force it via a large single observation); confirm a `compaction/summary`
+5. Repeat `/compact` after enough turns that the accumulated masked history passes the compact
+   budget (or force it via a large single observation); confirm a `compaction/summary`
    with the session's own provider/model, `usage` present, and the checkpoint text — not a
    placeholder list — as the session's new context.
 6. Confirm the context meter fell and agrees with the transcript view after each.

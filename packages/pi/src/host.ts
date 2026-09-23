@@ -98,6 +98,8 @@ export interface PiAssistantMessage {
 /** Pi's `Model`: opaque beyond identity, since this adapter never inspects it, only forwards it. */
 export interface PiModel {
   id: string
+  /** The model's context window in tokens, when the host's catalog states one. Drives the compact-budget default. */
+  contextWindow?: number
 }
 
 export interface PiCompleteOptions {

@@ -1,4 +1,4 @@
-import { type EngineConfig, resolveEngineConfigLayers } from '@maskpoint/core'
+import { deriveCompactBudget, type EngineConfig, resolveEngineConfigLayers } from '@maskpoint/core'
 
 /**
  * Maskpoint's settings for Pi, and the channels they arrive through.
@@ -29,6 +29,8 @@ export interface PiConfigSources {
   readonly env?: Readonly<Record<string, string | undefined>> | undefined
   /** This run's values for the extension's own CLI flags, keyed by config field. Unset flags are absent. */
   readonly flags?: Readonly<Partial<Record<keyof EngineConfig, unknown>>> | undefined
+  /** The session model's context window, when known. Drives the compact-budget default. */
+  readonly contextWindow?: number | undefined
 }
 
 /** One setting's two operator-facing names, so the table documents both channels at once. */
@@ -45,10 +47,10 @@ export const CHANNELS: Record<keyof EngineConfig, Channels> = {
     flag: 'maskpoint-enabled',
     description: 'Maskpoint: set to false to disable it entirely, leaving Pi to compact as if this extension were not installed (default true)',
   },
-  checkpointTriggerTokens: {
-    env: 'MASKPOINT_CHECKPOINT_TRIGGER_TOKENS',
-    flag: 'maskpoint-checkpoint-trigger-tokens',
-    description: 'Maskpoint: masked history above this many estimated tokens triggers one checkpoint model call (default 12000; raise it to keep compaction free of model calls)',
+  compactBudgetTokens: {
+    env: 'MASKPOINT_COMPACT_BUDGET_TOKENS',
+    flag: 'maskpoint-compact-budget-tokens',
+    description: 'Maskpoint: compacted history at or below this many estimated tokens is kept as-is with no model call; above it, one checkpoint call (default: a quarter of the model window, clamped to [24000, 96000]; 24000 when the window is unknown)',
   },
   checkpointModel: {
     env: 'MASKPOINT_CHECKPOINT_MODEL',
@@ -67,18 +69,45 @@ export const CHANNELS: Record<keyof EngineConfig, Channels> = {
   },
 }
 
-/** Every flag this extension registers with Pi, one per setting, for `registerFlag`. */
-export function flagSpecs(): readonly { name: string; description: string }[] {
-  return Object.values(CHANNELS).map((channel) => ({ name: channel.flag, description: channel.description }))
+/**
+ * Pre-rename channel names, still read and mapped onto the current field with a deprecation
+ * warning. The modern name in the same channel always wins (issue #46).
+ */
+const LEGACY_CHANNELS: Partial<Record<keyof EngineConfig, Channels>> = {
+  compactBudgetTokens: {
+    env: 'MASKPOINT_CHECKPOINT_TRIGGER_TOKENS',
+    flag: 'maskpoint-checkpoint-trigger-tokens',
+    description: 'Deprecated: use --maskpoint-compact-budget-tokens',
+  },
 }
 
-/** This run's value for every setting's flag, read back through Pi's `getFlag`. */
-export function readFlags(getFlag: (name: string) => boolean | string | undefined): Record<keyof EngineConfig, unknown> {
-  const flags = {} as Record<keyof EngineConfig, unknown>
+/** Every flag this extension registers with Pi: one per setting, plus the deprecated renames. */
+export function flagSpecs(): readonly { name: string; description: string }[] {
+  const specs = Object.values(CHANNELS).map((channel) => ({ name: channel.flag, description: channel.description }))
+  for (const [field, channel] of Object.entries(LEGACY_CHANNELS) as [keyof EngineConfig, Channels][])
+    specs.push({ name: channel.flag, description: `${channel.description} (sets ${field})` })
+  return specs
+}
+
+/** This run's flag values: modern names first, a field's deprecated flag only when its modern one is unset. */
+export function readFlags(getFlag: (name: string) => boolean | string | undefined): { values: Partial<Record<keyof EngineConfig, unknown>>; deprecations: readonly string[] } {
+  const values: Partial<Record<keyof EngineConfig, unknown>> = {}
+  const deprecations: string[] = []
   for (const [field, channel] of Object.entries(CHANNELS) as [keyof EngineConfig, Channels][]) {
-    flags[field] = getFlag(channel.flag)
+    const modern = getFlag(channel.flag)
+    if (modern !== undefined) {
+      values[field] = modern
+      continue
+    }
+    const legacy = LEGACY_CHANNELS[field]
+    if (legacy === undefined) continue
+    const value = getFlag(legacy.flag)
+    if (value !== undefined) {
+      values[field] = value
+      deprecations.push(`--${legacy.flag} is deprecated; use --${channel.flag}`)
+    }
   }
-  return flags
+  return { values, deprecations }
 }
 
 /**
@@ -93,7 +122,7 @@ function coerce(field: keyof EngineConfig, value: unknown): unknown {
       if (value === 'true' || value === '1') return true
       if (value === 'false' || value === '0') return false
       return value
-    case 'checkpointTriggerTokens':
+    case 'compactBudgetTokens':
       return /^\d+$/.test(value) ? Number(value) : value
     case 'maskReasoning':
       return coerce('enabled', value)
@@ -103,14 +132,26 @@ function coerce(field: keyof EngineConfig, value: unknown): unknown {
 }
 
 /** The environment layer, built only from variables that are actually set. */
-function fromEnvironment(env: PiConfigSources['env']): Record<string, unknown> {
+function fromEnvironment(env: PiConfigSources['env']): { raw: Record<string, unknown>; deprecations: readonly string[]; explicit: Set<string> } {
   const raw: Record<string, unknown> = {}
+  const deprecations: string[] = []
+  const explicit = new Set<string>()
   for (const [field, channels] of Object.entries(CHANNELS) as [keyof EngineConfig, Channels][]) {
-    const value = env?.[channels.env]
-    if (value === undefined) continue
-    raw[field] = coerce(field, value)
+    const modern = env?.[channels.env]
+    if (modern !== undefined) {
+      raw[field] = coerce(field, modern)
+      explicit.add(field)
+      continue
+    }
+    const legacy = LEGACY_CHANNELS[field]
+    const value = legacy === undefined ? undefined : env?.[legacy.env]
+    if (legacy !== undefined && value !== undefined) {
+      raw[field] = coerce(field, value)
+      explicit.add(field)
+      deprecations.push(`${legacy.env} is deprecated; use ${channels.env}`)
+    }
   }
-  return raw
+  return { raw, deprecations, explicit }
 }
 
 /**
@@ -127,14 +168,39 @@ function fromFlags(flags: PiConfigSources['flags']): Record<string, unknown> {
   return raw
 }
 
-/** Resolve Maskpoint's settings from every channel this host offers, warning through the given callback. */
+/** The host layer's explicitly-set fields, including pre-rename key names. */
+function hostExplicit(host: unknown): Set<string> {
+  const keys = new Set<string>()
+  if (typeof host === 'object' && host !== null && !Array.isArray(host)) {
+    for (const key of Object.keys(host)) keys.add(DEPRECATED_KEY_ALIASES[key] ?? key)
+  }
+  return keys
+}
+const DEPRECATED_KEY_ALIASES: Readonly<Record<string, string>> = { checkpointTriggerTokens: 'compactBudgetTokens' }
+
+/**
+ * Resolve Maskpoint's settings from every channel this host offers, warning through the given
+ * callback. When no channel set the budget and the session's model window is known, the budget is
+ * derived from it (`deriveCompactBudget`); a window of `undefined` leaves the documented flat
+ * default standing.
+ */
 export function loadConfig(sources: PiConfigSources, warn: (message: string) => void): EngineConfig {
-  return resolveEngineConfigLayers(
+  const environment = fromEnvironment(sources.env)
+  for (const message of environment.deprecations) warn(message)
+  const flagsRaw = fromFlags(sources.flags)
+  const resolved = resolveEngineConfigLayers(
     [
       { source: 'host', raw: sources.host },
-      { source: 'environment', raw: fromEnvironment(sources.env) },
-      { source: 'flag', raw: fromFlags(sources.flags) },
+      { source: 'environment', raw: environment.raw },
+      { source: 'flag', raw: flagsRaw },
     ],
     warn,
   )
+  const budgetExplicit = environment.explicit.has('compactBudgetTokens')
+    || flagsRaw.compactBudgetTokens !== undefined
+    || hostExplicit(sources.host).has('compactBudgetTokens')
+  if (!budgetExplicit && sources.contextWindow !== undefined) {
+    return { ...resolved, compactBudgetTokens: deriveCompactBudget(sources.contextWindow) }
+  }
+  return resolved
 }

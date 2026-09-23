@@ -49,7 +49,7 @@ export default function maskpoint(pi: PiExtensionApi): void {
     // Both operator channels are read here rather than when the extension loads: Pi parses its
     // command line after this factory returns, so `getFlag` answers `undefined` to a flag read at
     // load time (measured against a real release — the value is there by the time a handler runs).
-    const config = loadConfig({ env: process.env, flags: readFlags((name) => pi.getFlag(name)), host: ctx.config }, (message) => {
+    const warn = (message: string): void => {
       if (ctx.hasUI) {
         try {
           ctx.ui.notify(`Maskpoint ${message}`, 'warning')
@@ -57,7 +57,13 @@ export default function maskpoint(pi: PiExtensionApi): void {
           // A courtesy, never a reason to fail the compaction.
         }
       }
-    })
+    }
+    const flags = readFlags((name) => pi.getFlag(name))
+    for (const message of flags.deprecations) warn(message)
+    const config = loadConfig(
+      { env: process.env, flags: flags.values, host: ctx.config, contextWindow: ctx.model?.contextWindow },
+      warn,
+    )
     // Disabled: return nothing, exactly the documented fallback, so Pi's own compactor runs with no
     // trace of Maskpoint in the result (docs/spec.md, Configuration — "disable Maskpoint...").
     if (!config.enabled) return undefined

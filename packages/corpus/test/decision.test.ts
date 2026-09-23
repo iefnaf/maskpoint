@@ -23,7 +23,7 @@ const fixture = (name: string): CorpusFixture => {
   return found
 }
 
-const HUGE = { checkpointTriggerTokens: 1_000_000 }
+const HUGE = { compactBudgetTokens: 1_000_000 }
 const withoutFocus = (snapshot: ConversationSnapshot): ConversationSnapshot => {
   const { customInstructions: _focus, ...rest } = snapshot
   return rest
@@ -71,8 +71,8 @@ describe.each(corpus.map((each) => [each.name, each] as const))('the decision la
   it('draws the line at the budget: exactly at budget is masked history, one token under is a checkpoint request', () => {
     const size = outcome.stats.candidateTokens
     expect(size).toBeGreaterThan(0)
-    expect(decide(plain, { checkpointTriggerTokens: size }).kind).toBe('masked-history')
-    const over = decide(plain, { checkpointTriggerTokens: size - 1 })
+    expect(decide(plain, { compactBudgetTokens: size }).kind).toBe('masked-history')
+    const over = decide(plain, { compactBudgetTokens: size - 1 })
     if (over.kind !== 'checkpoint-requested') throw new Error(`expected checkpoint-requested, got ${over.kind}`)
     expect(over.reason).toBe('over-budget')
     expect(over.fallback).toEqual(outcome)
@@ -141,7 +141,7 @@ describe('the decision layer over specific corpus shapes', () => {
     expect(candidate).toBeGreaterThan(estimateTokens(snapshot.previousCheckpoint ?? ''))
     // ...and a budget that only the earlier state would fit does not fit the candidate.
     const stateOnly = estimateTokens(snapshot.previousCheckpoint ?? '')
-    expect(decide(snapshot, { checkpointTriggerTokens: stateOnly }).kind).toBe('checkpoint-requested')
+    expect(decide(snapshot, { compactBudgetTokens: stateOnly }).kind).toBe('checkpoint-requested')
   })
 
   it('merges the host’s file operations into the earlier lists rather than replacing them', () => {
@@ -221,6 +221,6 @@ describe('the estimator is conservative on CJK and code-heavy text', () => {
     const plain = withoutFocus(snapshot)
     const compacted = snapshot.items.slice(0, boundaryIndex(snapshot))
     const budget = naive(compacted.map(payload).join('\n'))
-    expect(decide(plain, { checkpointTriggerTokens: budget }).kind).toBe('checkpoint-requested')
+    expect(decide(plain, { compactBudgetTokens: budget }).kind).toBe('checkpoint-requested')
   })
 })

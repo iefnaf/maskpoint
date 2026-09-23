@@ -112,7 +112,7 @@ the time this code does.
 {
   "maskpoint": {
     "enabled": true,
-    "checkpointTriggerTokens": 12000,
+    "compactBudgetTokens": 24000,
     "maskReasoning": false,
     "notificationLevel": "normal"
   }
@@ -121,7 +121,7 @@ the time this code does.
 
 - `enabled: false` makes `PreCompact` a pure no-op: no transcript read, no state written, no steering
   line — nothing for `SessionStart` or `PostCompact` to find on a later hook invocation either.
-- `checkpointTriggerTokens` is the budget `decide()` compares the masked-history candidate against;
+- `compactBudgetTokens` is the budget `decide()` compares the masked-history candidate against;
   lowering it flips `overBudget` from `false` to `true` in the persisted `details` and in the log line
   sooner. This adapter has no checkpoint call yet, so it never triggers one — see "Not yet" below.
 - `checkpointModel` is accepted and validated, but unused: there is nothing to point it at until this

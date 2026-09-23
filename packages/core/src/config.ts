@@ -9,8 +9,12 @@ export type NotificationLevel = 'silent' | 'normal' | 'verbose'
 export interface EngineConfig {
   /** When false, an adapter must behave as though it were not installed: no artifact, no state. */
   readonly enabled: boolean
-  /** `BudgetPolicy.checkpointTriggerTokens` — docs/design.md, "Budget". */
-  readonly checkpointTriggerTokens: number
+  /**
+   * `BudgetPolicy.compactBudgetTokens` — docs/design.md, "Budget". The documented default is the
+   * flat fallback; an adapter that can see the model's context window should derive instead
+   * (`deriveCompactBudget`) unless this was set explicitly.
+   */
+  readonly compactBudgetTokens: number
   /** A registered model id to use for the checkpoint call instead of the session's own. */
   readonly checkpointModel?: string
   /**
@@ -25,7 +29,7 @@ export interface EngineConfig {
 /** The design's documented defaults (docs/spec.md, "Configuration"). */
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   enabled: true,
-  checkpointTriggerTokens: DEFAULT_BUDGET.checkpointTriggerTokens,
+  compactBudgetTokens: DEFAULT_BUDGET.compactBudgetTokens,
   maskReasoning: false,
   notificationLevel: 'normal',
 }
@@ -41,7 +45,14 @@ export interface ConfigResolution {
   readonly warnings: readonly ConfigWarning[]
 }
 
-const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'checkpointTriggerTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
+const KNOWN_KEYS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
+
+/**
+ * Pre-renames of `EngineConfig` keys, still accepted in any layer and mapped onto their current
+ * name with a deprecation warning: `checkpointTriggerTokens` became `compactBudgetTokens` when the
+ * budget learned to scale with the model's context window (issue #46).
+ */
+const DEPRECATED_KEYS: Readonly<Record<string, keyof EngineConfig>> = { checkpointTriggerTokens: 'compactBudgetTokens' }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -58,21 +69,26 @@ function applyLayer(raw: unknown, source: string, into: { -readonly [K in keyof 
     return
   }
   for (const key of Object.keys(raw)) {
-    if (!(KNOWN_KEYS as readonly string[]).includes(key)) {
+    const deprecatedTo = DEPRECATED_KEYS[key]
+    if (deprecatedTo !== undefined && KNOWN_KEYS.includes(key as keyof EngineConfig) === false && !(deprecatedTo in raw)) {
+      warnings.push({ field: deprecatedTo, message: `"${key}" is deprecated; use "${deprecatedTo}"` })
+    }
+    if (!(KNOWN_KEYS as readonly string[]).includes(key) && deprecatedTo === undefined) {
       warnings.push({ field: key, message: `unknown ${source} configuration key "${key}" ignored` })
       continue
     }
+    const field = (deprecatedTo !== undefined && !(deprecatedTo in raw) ? deprecatedTo : key) as keyof EngineConfig
     const value = raw[key]
     const invalid = (): void => {
       warnings.push({ field: key, message: `invalid ${source} value for "${key}" (${JSON.stringify(value)}); ignoring it` })
     }
-    switch (key as keyof EngineConfig) {
+    switch (field) {
       case 'enabled':
         if (typeof value === 'boolean') into.enabled = value
         else invalid()
         break
-      case 'checkpointTriggerTokens':
-        if (typeof value === 'number' && Number.isInteger(value) && value > 0) into.checkpointTriggerTokens = value
+      case 'compactBudgetTokens':
+        if (typeof value === 'number' && Number.isInteger(value) && value > 0) into.compactBudgetTokens = value
         else invalid()
         break
       case 'checkpointModel':
@@ -151,8 +167,27 @@ export function resolveEngineConfigLayer(raw: unknown, warn: (message: string) =
 }
 
 /** The `BudgetPolicy` an `EngineConfig` implies, so every adapter builds it the same way. */
-export function budgetOf(config: Pick<EngineConfig, 'checkpointTriggerTokens'>): BudgetPolicy {
-  return { checkpointTriggerTokens: config.checkpointTriggerTokens }
+export function budgetOf(config: Pick<EngineConfig, 'compactBudgetTokens'>): BudgetPolicy {
+  return { compactBudgetTokens: config.compactBudgetTokens }
+}
+
+/** The measured shape of the window-derived budget (docs/budget-calibration.md): a quarter of the window, clamped. */
+export const COMPACT_BUDGET_WINDOW_FRACTION = 0.25
+/** The floor: below this, mask-only could rarely win even on the smallest windows. */
+export const COMPACT_BUDGET_MIN_TOKENS = 24_000
+/** The ceiling: holed history above this must be distilled, whatever the window (measured max candidate: 309k). */
+export const COMPACT_BUDGET_MAX_TOKENS = 96_000
+
+/**
+ * The compact budget for a model whose context window is known: a fixed fraction of the window,
+ * clamped. Calibrated against real compaction events (docs/budget-calibration.md): 62 % of events
+ * stay mask-only, versus 7 % at the old flat 12k, while the artifact's share of the window stays
+ * bounded. Invalid windows fall back to the flat default.
+ */
+export function deriveCompactBudget(contextWindow: number): number {
+  if (!(typeof contextWindow === 'number') || !Number.isFinite(contextWindow) || contextWindow <= 0) return DEFAULT_ENGINE_CONFIG.compactBudgetTokens
+  const scaled = Math.round(COMPACT_BUDGET_WINDOW_FRACTION * contextWindow)
+  return Math.min(Math.max(scaled, COMPACT_BUDGET_MIN_TOKENS), COMPACT_BUDGET_MAX_TOKENS)
 }
 
 /** The `MaskOptions` an `EngineConfig` implies, so no adapter has to remember the field mapping. */

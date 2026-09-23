@@ -196,7 +196,7 @@ function decide(input: ConversationSnapshot, budget: BudgetPolicy): Decision
 // The decision layer under run(): synchronous and model-free, so the masked-history path cannot make a
 // model call. Decision = Outcome | { kind: 'checkpoint-requested'; reason: 'over-budget' | 'custom-instructions';
 // fallback: MaskedHistoryOutcome }. The fallback is what to return if the checkpoint call is rejected, and its
-// artifact is the checkpoint's input. BudgetPolicy = { checkpointTriggerTokens: number }.
+// artifact is the checkpoint's input. BudgetPolicy = { compactBudgetTokens: number }.
 function estimateTokens(text: string): number
 function maskSpan(items: Item[], boundary: { id: string }): { items: Item[]; stats: MaskStats }
 // MaskStats = Pick<Stats, 'observationsMasked' | 'charsOmitted'>: candidateTokens belongs to accumulation.
@@ -244,11 +244,11 @@ interface EngineDeps {
 
 ### Budget
 
-- The decision is one comparison: estimated size of the whole candidate against `checkpointTriggerTokens`. At or below budget the candidate is returned as masked history with zero model calls. Above budget — or whenever custom instructions are present — exactly one checkpoint call is made.
+- The decision is one comparison: estimated size of the whole candidate against `compactBudgetTokens`. At or below budget the candidate is returned as masked history with zero model calls. Above budget — or whenever custom instructions are present — exactly one checkpoint call is made.
 - The candidate is measured as one text: previous state, then the history framing and each newly evicted item under its role label and payload. The budget therefore counts the labels and framing an adapter's rendering adds, not just payloads. The comparison is written "within budget or not", so a budget or estimate that cannot be compared (NaN) takes the checkpoint path, never the masked one. Blank custom instructions are not instructions.
 - The unit is tokens, not turns, because the paper's turn-count parameters were calibrated for a different scaffold and do not transfer. The paper's turn window maps onto the host's retained region; its summary interval maps onto this budget.
+- The default is **derived from the model's context window** when the adapter can see one: a quarter of the window, clamped to [24,000, 96,000] (`deriveCompactBudget`); the flat fallback when it cannot is 24,000. These are measured tuning parameters, not derived constants — the calibration, the real-event coverage curves behind them, and the correction of the earlier 12,000-token default live in `docs/budget-calibration.md`. A pre-rename `checkpointTriggerTokens` key (and, on Pi, its `MASKPOINT_CHECKPOINT_TRIGGER_TOKENS` / `--maskpoint-checkpoint-trigger-tokens` channels) is still accepted with a deprecation warning.
 - The estimator is deliberately conservative, weighting CJK text above its character count, so that non-English sessions cannot silently exceed the budget. Calibration against host-provided meters is an open issue.
-- The initial default is 12,000 tokens and is a tuning parameter, not a derived constant.
 
 ### Checkpoint
 
@@ -260,7 +260,7 @@ interface EngineDeps {
 
 ### Configuration
 
-- Shared engine settings, resolved by a pure, host-free function in core (`resolveEngineConfig`): `enabled`, `checkpointTriggerTokens`, an optional `checkpointModel`, `maskReasoning`, and `notificationLevel` (`'silent' | 'normal' | 'verbose'`). Everything an adapter needs to run is the returned `EngineConfig`; nothing about *where* the raw values came from crosses into core. Each helper that turns a setting into an engine input lives beside it (`budgetOf`, `maskOptionsOf`), so an adapter never maps a field by hand.
+- Shared engine settings, resolved by a pure, host-free function in core (`resolveEngineConfig`): `enabled`, `compactBudgetTokens`, an optional `checkpointModel`, `maskReasoning`, and `notificationLevel` (`'silent' | 'normal' | 'verbose'`). Everything an adapter needs to run is the returned `EngineConfig`; nothing about *where* the raw values came from crosses into core. Each helper that turns a setting into an engine input lives beside it (`budgetOf`, `deriveCompactBudget`, `maskOptionsOf`), so an adapter never maps a field by hand.
 - Two raw layers in, one resolved config out: `global` always applies; `project` applies only when the caller says `projectTrusted: true` (docs/spec.md, Configuration — "an untrusted repository cannot choose my model or alter my compaction behavior"). An untrusted `project` layer is not parsed at all, so a malformed value inside it produces exactly one warning ("ignored: not trusted"), never a second, more specific one that would imply it was read.
 - Each field is validated on its own: a value of the wrong type or out of range produces one warning and the field falls back to whatever the next-more-authoritative layer (or the documented default) would already say — never a thrown error, and never a decline. An unrecognized key produces the same shape of warning rather than being silently dropped or silently accepted.
 - **As built (#8).** `resolveEngineConfig`/`resolveEngineConfigLayer` in `packages/core/src/config.ts` are exactly this: pure, no I/O, Seam-1-tested (`packages/core/test/config.test.ts`). What "global", "project", and "trusted" mean is host-specific and answered by each adapter, not by core:

@@ -1,7 +1,7 @@
 export { artifactCandidateText, candidateTokens, payloadOf } from './candidate.js'
 export { CHECKPOINT_SECTIONS } from './checkpoint.js'
 export type { ConfigResolution, ConfigWarning, EngineConfig, NotificationLevel } from './config.js'
-export { budgetOf, DEFAULT_ENGINE_CONFIG, maskOptionsOf, resolveEngineConfig, resolveEngineConfigLayer, resolveEngineConfigLayers } from './config.js'
+export { budgetOf, COMPACT_BUDGET_MAX_TOKENS, COMPACT_BUDGET_MIN_TOKENS, COMPACT_BUDGET_WINDOW_FRACTION, DEFAULT_ENGINE_CONFIG, deriveCompactBudget, maskOptionsOf, resolveEngineConfig, resolveEngineConfigLayer, resolveEngineConfigLayers } from './config.js'
 export type { CheckpointRequest, Decision } from './decide.js'
 export { DEFAULT_BUDGET, decide } from './decide.js'
 export { estimateTokens } from './estimate.js'

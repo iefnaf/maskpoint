@@ -22,8 +22,8 @@ import { type ModelDouble, modelDouble, responses, type Script } from '../src/mo
 const corpus = loadCorpus()
 const everyFixture = corpus.map((each) => [each.name, each] as const)
 
-const TINY = { checkpointTriggerTokens: 1 }
-const HUGE = { checkpointTriggerTokens: 1_000_000 }
+const TINY = { compactBudgetTokens: 1 }
+const HUGE = { compactBudgetTokens: 1_000_000 }
 const CHECKPOINT_TEXT = '## User context and constraints\nKeep the public API stable.\n\n## Next steps\nRun the billing tests.'
 
 const withoutFocus = (snapshot: ConversationSnapshot): ConversationSnapshot => {
@@ -323,10 +323,10 @@ describe('when a checkpoint is and is not called for', () => {
     const plain = withoutFocus(fixture('text-observations').snapshot)
     const size = (decide(plain, HUGE) as MaskedHistoryOutcome).stats.candidateTokens
     const atBudget = called(responses.success(CHECKPOINT_TEXT))
-    expect((await run(plain, { checkpointTriggerTokens: size }, atBudget.deps)).kind).toBe('masked-history')
+    expect((await run(plain, { compactBudgetTokens: size }, atBudget.deps)).kind).toBe('masked-history')
     expect(atBudget.double.requests).toHaveLength(0)
     const over = called(responses.success(CHECKPOINT_TEXT))
-    expect((await run(plain, { checkpointTriggerTokens: size - 1 }, over.deps)).kind).toBe('checkpoint')
+    expect((await run(plain, { compactBudgetTokens: size - 1 }, over.deps)).kind).toBe('checkpoint')
     expect(over.double.requests).toHaveLength(1)
   })
 

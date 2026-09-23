@@ -65,7 +65,7 @@ Framing accounted for a real slice of the headline numbers — `parallel-tool-ca
 
 ## 2. Zero-LLM compaction ratio and usable-result rate
 
-Run via `npx tsx packages/corpus/src/cli.ts quality-bars`, driving every corpus fixture through the real engine (`@maskpoint/core`'s `run`) at the actual default budget (`DEFAULT_BUDGET`, 12,000 tokens):
+Run via `npx tsx packages/corpus/src/cli.ts quality-bars`, driving every corpus fixture through the real engine (`@maskpoint/core`'s `run`) at the then-default budget of 12,000 tokens (since renamed `compactBudgetTokens` and recalibrated — `docs/budget-calibration.md`):
 
 - **8 of 9 fixtures mask with zero model calls; 1 requests a checkpoint** (the `cjk` fixture, which carries `customInstructions` — the same reason the parity harness excludes it from the cross-adapter comparison, docs/design.md "Testing design"). **Zero-LLM ratio: 88.9%.**
 - **0 of 9 fixtures decline.** **Usable-result rate: 100%** (every fixture produces masked history or a checkpoint; no decline reasons fired).

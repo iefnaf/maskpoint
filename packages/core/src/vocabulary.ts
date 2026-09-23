@@ -87,7 +87,7 @@ export interface CapabilityProfile {
  */
 export interface BudgetPolicy {
   /** The candidate at or below this many estimated tokens stays masked history; above it, a checkpoint. */
-  checkpointTriggerTokens: number
+  compactBudgetTokens: number
 }
 
 /** The statistics key set, identical on every platform. */

@@ -45,9 +45,11 @@ Other measurements from the same run:
 
 - Compression: **2.6x** on tokens (2.7x on characters, 3.9x median per session).
 - Candidate size: median **11k tokens** (p25 2k, p75 40k, p90 81k); the evicted span's median is
-  50k tokens. The default budget of 12,000 therefore makes **50.4 %** of first compactions
-  mask-only, 65.0 % at 26,214 and 83.1 % at 60,000 — the last two are 10 % and 23 % of glm-5.3's
-  262,144-token window.
+  50k tokens. The default budget of 12,000 therefore makes **50.4 %** of *simulated first*
+  compactions mask-only, 65.0 % at 26,214 and 83.1 % at 60,000 — the last two are 10 % and 23 % of
+  glm-5.3's 262,144-token window. **Correction (2026-09-23):** that rate is a one-shot simulation
+  that forces every session through one compaction; at the 42 *real* compaction events the
+  candidate median is 41.5k and only **7 %** fit 12k — see [`budget-calibration.md`](budget-calibration.md).
 - Of 54,356 tool results in evicted spans, 88.9 % were masked and 11.1 % were left verbatim by the
   no-expansion rule.
 - Tool results by tool: `read` 51.5 %, `bash` 29.5 %, `fabric_exec` 6.2 %, `grep` 5.6 %.

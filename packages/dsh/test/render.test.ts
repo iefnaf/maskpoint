@@ -21,7 +21,7 @@ describe('the budget counts what the model is shown', () => {
       evictedThrough: 'a',
       reason: 'manual',
     }
-    const decision = decide(snapshot, { checkpointTriggerTokens: 1_000_000 })
+    const decision = decide(snapshot, { compactBudgetTokens: 1_000_000 })
     if (decision.kind !== 'masked-history') throw new Error('expected masked history')
 
     expect(estimateTokens(renderText(decision.artifact))).toBe(decision.stats.candidateTokens)

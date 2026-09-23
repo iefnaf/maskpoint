@@ -44,30 +44,30 @@ describe('loadConfig', () => {
 
   it('applies the global settings.json maskpoint field', () => {
     const paths = project()
-    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { checkpointTriggerTokens: 20_000 } })
-    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, checkpointTriggerTokens: 20_000 })
+    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { compactBudgetTokens: 20_000 } })
+    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, compactBudgetTokens: 20_000 })
   })
 
   it('applies the project settings.json maskpoint field over the global one', () => {
     const paths = project()
-    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { checkpointTriggerTokens: 20_000, notificationLevel: 'verbose' } })
-    writeSettings(paths.cwd, 'settings.json', { maskpoint: { checkpointTriggerTokens: 5_000 } })
-    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, checkpointTriggerTokens: 5_000, notificationLevel: 'verbose' })
+    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { compactBudgetTokens: 20_000, notificationLevel: 'verbose' } })
+    writeSettings(paths.cwd, 'settings.json', { maskpoint: { compactBudgetTokens: 5_000 } })
+    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, compactBudgetTokens: 5_000, notificationLevel: 'verbose' })
   })
 
   it('lets settings.local.json override settings.json field by field', () => {
     const paths = project()
-    writeSettings(paths.cwd, 'settings.json', { maskpoint: { checkpointTriggerTokens: 5_000, notificationLevel: 'verbose' } })
-    writeSettings(paths.cwd, 'settings.local.json', { maskpoint: { checkpointTriggerTokens: 3_000 } })
-    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, checkpointTriggerTokens: 3_000, notificationLevel: 'verbose' })
+    writeSettings(paths.cwd, 'settings.json', { maskpoint: { compactBudgetTokens: 5_000, notificationLevel: 'verbose' } })
+    writeSettings(paths.cwd, 'settings.local.json', { maskpoint: { compactBudgetTokens: 3_000 } })
+    expect(loadConfig(paths, () => {})).toEqual({ ...DEFAULT_ENGINE_CONFIG, compactBudgetTokens: 3_000, notificationLevel: 'verbose' })
   })
 
   it('warns and falls back to the default when a value is invalid, without crashing', () => {
     const paths = project()
-    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { checkpointTriggerTokens: 'a lot' } })
+    writeSettings(paths.homeDir, 'settings.json', { maskpoint: { compactBudgetTokens: 'a lot' } })
     const warnings: string[] = []
     expect(loadConfig(paths, (m) => warnings.push(m))).toEqual(DEFAULT_ENGINE_CONFIG)
-    expect(warnings).toEqual(['config: invalid global value for "checkpointTriggerTokens" ("a lot"); ignoring it'])
+    expect(warnings).toEqual(['config: invalid global value for "compactBudgetTokens" ("a lot"); ignoring it'])
   })
 
   it('lets a project settings.json disable Maskpoint', () => {
