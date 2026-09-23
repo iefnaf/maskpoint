@@ -153,4 +153,12 @@ export interface PiExtensionApi {
   registerFlag(name: string, options: PiFlagOptions): unknown
   /** This run's value for a registered flag. `undefined` when the flag was not passed. */
   getFlag(name: string): boolean | string | undefined
+  /** Register a `/slash` command, so it appears in the command palette. `args` is the raw text after the name. */
+  registerCommand(name: string, options: PiCommandOptions): unknown
+}
+
+/** A `/maskpoint` subcommand registration: what it is, and what runs when the user types it. */
+export interface PiCommandOptions {
+  description?: string
+  handler: (args: string, ctx: PiContext) => unknown | Promise<unknown>
 }

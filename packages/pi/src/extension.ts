@@ -1,6 +1,10 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { budgetOf, maskOptionsOf, type NotificationLevel } from '@maskpoint/core'
+import { runMaskpointCommand } from './command.js'
 import { planCompaction, type PiEffect, toPiResult } from './compact.js'
-import { flagSpecs, loadConfig, readFlags } from './config.js'
+import { flagSpecs, loadConfig, readFlags, resolveConfig } from './config.js'
+import { StoredConfig } from './storage.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from './host.js'
 
 /** One line saying what happened, in the statistics' own words. Structure and counts only, never content. */
@@ -43,6 +47,38 @@ export default function maskpoint(pi: PiExtensionApi): void {
   // registering them is what puts them in `pi --help` and in this run's parsed command line.
   for (const flag of flagSpecs()) pi.registerFlag(flag.name, { description: flag.description, type: 'string' })
 
+  // The extension-owned settings file: what `/maskpoint` writes and every compaction reads. It is
+  // the persistent surface Pi itself never gave an extension (issue #39); `MASKPOINT_CONFIG`
+  // points it elsewhere for profiles and tests.
+  const store = new StoredConfig(process.env.MASKPOINT_CONFIG ?? join(homedir(), '.pi', 'agent', 'maskpoint.json'))
+
+  // The interactive surface for every setting (issue #48): shows the effective config with where
+  // each value came from, or edits the stored file — which the next compaction reads, so a change
+  // needs no restart.
+  pi.registerCommand('maskpoint', {
+    description: 'Maskpoint: show or change compaction settings (stored; applies to the next compaction)',
+    handler: async (args: string, ctx: PiContext): Promise<void> => {
+      const show = (message: string, level: 'info' | 'warning'): void => {
+        if (!ctx.hasUI) return
+        try {
+          ctx.ui.notify(message, level)
+        } catch {
+          // A courtesy; a settings display can never cost the session anything.
+        }
+      }
+      await runMaskpointCommand(
+        args,
+        store,
+        () =>
+          resolveConfig(
+            { env: process.env, flags: readFlags((name) => pi.getFlag(name)).values, host: ctx.config, stored: store.read(), contextWindow: ctx.model?.contextWindow },
+            (message) => show(`Maskpoint ${message}`, 'warning'),
+          ),
+        (message, level) => show(message, level),
+      )
+    },
+  })
+
   pi.on('session_before_compact', async (event: PiBeforeCompactEvent, ctx: PiContext): Promise<PiCompactionResult | undefined> => {
     // A compaction that was cancelled before it reached us has nothing to gain from our work.
     if (event.signal?.aborted) return undefined
@@ -61,7 +97,7 @@ export default function maskpoint(pi: PiExtensionApi): void {
     const flags = readFlags((name) => pi.getFlag(name))
     for (const message of flags.deprecations) warn(message)
     const config = loadConfig(
-      { env: process.env, flags: flags.values, host: ctx.config, contextWindow: ctx.model?.contextWindow },
+      { env: process.env, flags: flags.values, host: ctx.config, stored: store.read(), contextWindow: ctx.model?.contextWindow },
       warn,
     )
     // Disabled: return nothing, exactly the documented fallback, so Pi's own compactor runs with no

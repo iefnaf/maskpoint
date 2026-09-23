@@ -42,10 +42,10 @@ describe('the Pi package', () => {
     expect(manifest.devDependencies?.['@maskpoint/core']).toBeUndefined()
   })
 
-  it('imports only its own modules and the platform-free core: no Pi SDK, no other package', () => {
+  it('imports only its own modules, node builtins, and the platform-free core: no Pi SDK, no other package', () => {
     for (const file of sourceFiles()) {
       for (const specifier of specifiers(readFileSync(file, 'utf8'))) {
-        expect(specifier, `${file} imports ${specifier}`).toMatch(/^(\.\.?\/|@maskpoint\/core$)/)
+        expect(specifier, `${file} imports ${specifier}`).toMatch(/^(node:[a-z:]+|\.\.?\/|@maskpoint\/core$)/)
       }
     }
   })
