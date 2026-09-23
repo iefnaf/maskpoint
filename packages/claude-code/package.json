@@ -1,6 +1,6 @@
 {
   "name": "@maskpoint/claude-code",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Maskpoint for Claude Code: generates a masked-history artifact before compaction and re-injects it afterwards. Assisted augmentation, never replacement.",
   "license": "MIT",
   "repository": {
@@ -33,7 +33,7 @@
     "prepack": "tsc -p ../core/tsconfig.build.json && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@maskpoint/core": "^0.3.0"
+    "@maskpoint/core": "^0.4.0"
   },
   "engines": {
     "node": ">=22"

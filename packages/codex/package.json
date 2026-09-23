@@ -1,6 +1,6 @@
 {
   "name": "@maskpoint/codex",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Maskpoint for Codex CLI: pushes preservation instructions into Codex's own compaction prompt where its configuration allows, and re-injects a masked-history artifact after compaction. Assisted augmentation, never replacement.",
   "license": "MIT",
   "repository": {
@@ -33,7 +33,7 @@
     "prepack": "tsc -p ../core/tsconfig.build.json && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@maskpoint/core": "^0.3.0"
+    "@maskpoint/core": "^0.4.0"
   },
   "engines": {
     "node": ">=22"
