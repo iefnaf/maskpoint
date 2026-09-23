@@ -119,9 +119,20 @@ export interface PiModelRegistry {
 }
 
 /** The parts of Pi's `ExtensionContext` the handler uses. */
+/**
+ * The interactive prompts a command may raise. Each blocks until the user answers; `select` and
+ * `input` answer `undefined` when the user dismisses the prompt (Esc), which the caller treats as
+ * "change nothing" — never as an error.
+ */
+export interface PiUI {
+  notify(message: string, level?: 'info' | 'warning' | 'error'): void
+  select(title: string, options: readonly string[]): Promise<string | undefined>
+  input(title: string, options?: { default?: string; placeholder?: string }): Promise<string | undefined>
+}
+
 export interface PiContext {
   hasUI: boolean
-  ui: { notify(message: string, level?: 'info' | 'warning' | 'error'): void }
+  ui: PiUI
   /** The session's active model. Absent when none is configured or authenticated. */
   model: PiModel | undefined
   modelRegistry: PiModelRegistry

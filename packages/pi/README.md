@@ -96,12 +96,26 @@ note on why no checkpoint ran.
 
 ## Configuration
 
-The interactive surface is the **`/maskpoint` command** — it shows the effective settings, and its
-changes are stored in an extension-owned file (`~/.pi/agent/maskpoint.json`) that the next
-compaction reads, so they apply with **no restart**:
+The interactive surface is the **`/maskpoint` command**: typed with no arguments it opens a
+settings menu — every current value in the labels, pick one to change, pick the new value, repeat
+or press Esc to finish. Nothing to remember, nothing written on dismissal:
 
 ```
-/maskpoint                        show every setting and where it came from
+❯ Maskpoint settings — pick one to change (Esc to finish)
+  mask-reasoning: off
+  budget: 96000 (derived from the model window)
+  checkpoint-model: the session model
+  notify: normal
+  enabled: on
+  reset stored settings
+  done
+```
+
+Changes are stored in an extension-owned file (`~/.pi/agent/maskpoint.json`) that the next
+compaction reads, so they apply with **no restart**. Typed subcommands do the same thing for
+scripts and muscle memory:
+
+```
 /maskpoint reasoning on|off       mask assistant reasoning as well as observations
 /maskpoint budget <tokens>|auto   compact budget; "auto" follows the model window
 /maskpoint model <id>|default     model for the checkpoint call

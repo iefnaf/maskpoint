@@ -74,7 +74,7 @@ export default function maskpoint(pi: PiExtensionApi): void {
             { env: process.env, flags: readFlags((name) => pi.getFlag(name)).values, host: ctx.config, stored: store.read(), contextWindow: ctx.model?.contextWindow },
             (message) => show(`Maskpoint ${message}`, 'warning'),
           ),
-        (message, level) => show(message, level),
+        { select: (title, options) => ctx.ui.select(title, options), input: (title, options) => ctx.ui.input(title, options), notify: (message, level) => show(message, level) },
       )
     },
   })

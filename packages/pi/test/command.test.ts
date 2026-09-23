@@ -66,7 +66,7 @@ describe('runMaskpointCommand', () => {
   const run = async (args: string, sources: Parameters<typeof resolveConfig>[0], notes: { message: string; level: string }[] = []) => {
     const { store } = newStore()
     const resolve = () => resolveConfig(sources, quiet())
-    const message = await runMaskpointCommand(args, store, resolve, (message, level) => notes.push({ message, level }))
+    const message = await runMaskpointCommand(args, store, resolve, { select: undefined, input: undefined, notify: (message, level) => notes.push({ message, level }) })
     return { store, notes, message }
   }
 
@@ -96,7 +96,7 @@ describe('runMaskpointCommand', () => {
   it('"auto" removes the stored budget so the window derivation stands again', async () => {
     const { store } = newStore()
     store.write({ compactBudgetTokens: 8_000 })
-    const message = await runMaskpointCommand('budget auto', store, () => resolveConfig({ stored: store.read(), contextWindow: 200_000 }, quiet()), () => {})
+    const message = await runMaskpointCommand('budget auto', store, () => resolveConfig({ stored: store.read(), contextWindow: 200_000 }, quiet()), { select: undefined, input: undefined, notify: () => {} })
     expect(message).toMatch(/back to the window-derived default/)
     expect(store.read()).toEqual({})
     expect(resolveConfig({ stored: store.read(), contextWindow: 200_000 }, quiet()).config.compactBudgetTokens).toBe(50_000)
@@ -105,7 +105,7 @@ describe('runMaskpointCommand', () => {
   it('reset clears every stored setting', async () => {
     const { store } = newStore()
     store.write({ maskReasoning: true, compactBudgetTokens: 8_000 })
-    const message = await runMaskpointCommand('reset', store, () => resolveConfig({ stored: store.read() }, quiet()), () => {})
+    const message = await runMaskpointCommand('reset', store, () => resolveConfig({ stored: store.read() }, quiet()), { select: undefined, input: undefined, notify: () => {} })
     expect(message).toMatch(/stored settings cleared/)
     expect(store.read()).toEqual({})
   })
@@ -115,5 +115,78 @@ describe('runMaskpointCommand', () => {
       const { message } = await run(args, {})
       expect(message).toMatch(/Maskpoint usage:/)
     }
+  })
+})
+
+describe('the interactive wizard', () => {
+  /** A scripted user: each prompt consumes the next answer, in order; undefined stands for Esc. */
+  const scripted = (answers: (string | undefined)[]) => {
+    const prompts: { title: string; options?: readonly string[] }[] = []
+    let n = 0
+    const ui = {
+      select: async (title: string, options: readonly string[]) => {
+        prompts.push({ title, options })
+        return answers[n++]
+      },
+      input: async (title: string) => {
+        prompts.push({ title })
+        return answers[n++]
+      },
+      notify: (_message: string, _level: 'info' | 'warning') => {},
+    }
+    return { ui, prompts }
+  }
+
+  it('walks the menu, stores the choice, refreshes the labels, and exits on Esc', async () => {
+    const { store } = newStore()
+    const { ui } = scripted(['mask-reasoning: off', 'on', undefined])
+    await runMaskpointCommand('', store, () => resolveConfig({ stored: store.read(), contextWindow: 1_000_000 }, quiet()), ui)
+    expect(store.read()).toEqual({ maskReasoning: true })
+  })
+
+  it('shows the updated value when the menu loops', async () => {
+    const { store } = newStore()
+    const { ui, prompts } = scripted(['mask-reasoning: off', 'on', 'mask-reasoning: on', 'off', undefined])
+    await runMaskpointCommand('', store, () => resolveConfig({ stored: store.read() }, quiet()), ui)
+    expect(prompts[0]?.title).toMatch(/pick one to change/)
+    expect(prompts[2]?.options?.[0]).toContain('mask-reasoning: on')
+    expect(store.read()).toEqual({ maskReasoning: false })
+  })
+
+  it('budget "custom…" goes through input validation: a bad value warns and writes nothing', async () => {
+    const { store } = newStore()
+    const notes: { message: string; level: string }[] = []
+    const { ui } = scripted(['budget: 96000', 'custom…', 'lots'])
+    ui.notify = (message: string, level: 'info' | 'warning') => notes.push({ message, level })
+    await runMaskpointCommand('', store, () => resolveConfig({ stored: store.read(), contextWindow: 1_000_000 }, quiet()), ui)
+    expect(notes[0]?.level).toBe('warning')
+    expect(notes[0]?.message).toMatch(/whole number of tokens/)
+    expect(store.read()).toBeUndefined()
+  })
+
+  it('budget auto removes the stored value from the menu', async () => {
+    const { store } = newStore()
+    store.write({ compactBudgetTokens: 8_000 })
+    const { ui } = scripted(['budget: 8000', 'auto (follow the model window)', undefined])
+    const message = await runMaskpointCommand('', store, () => resolveConfig({ stored: store.read(), contextWindow: 200_000 }, quiet()), ui)
+    expect(message).toMatch(/back to the window-derived default/)
+    expect(store.read()).toEqual({})
+  })
+
+  it('reset from the menu clears the store', async () => {
+    const { store } = newStore()
+    store.write({ maskReasoning: true, compactBudgetTokens: 8_000 })
+    const { ui } = scripted(['reset stored settings', undefined])
+    const message = await runMaskpointCommand('', store, () => resolveConfig({ stored: store.read() }, quiet()), ui)
+    expect(message).toMatch(/stored settings cleared/)
+    expect(store.read()).toEqual({})
+  })
+
+  it('Esc at the first menu writes nothing', async () => {
+    const { store } = newStore()
+    const { ui } = scripted([undefined])
+    const message = await runMaskpointCommand('', store, () => resolveConfig({}, quiet()), ui)
+    expect(message).toBe('Maskpoint: no changes')
+    expect(store.read()).toBeUndefined()
   })
 })

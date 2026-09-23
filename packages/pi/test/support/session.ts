@@ -204,7 +204,11 @@ export function fakeContext(hasUI = true, config?: unknown, contextWindow?: numb
   }
   return {
     hasUI,
-    ui: { notify: (message, level) => notes.push({ message, level }) },
+    ui: {
+      notify: (message, level) => notes.push({ message, level }),
+      select: () => Promise.resolve(undefined),
+      input: () => Promise.resolve(undefined),
+    },
     notes,
     model: { id: 'test-model', ...(contextWindow === undefined ? {} : { contextWindow }) },
     modelRegistry,
