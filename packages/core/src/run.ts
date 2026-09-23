@@ -21,3 +21,14 @@ export async function run(
   if (decision.kind !== 'checkpoint-requested') return decision
   return requestCheckpoint(decision, snapshot, deps)
 }
+
+/**
+ * `run` with the checkpoint call refused (`checkpointEnabled: false`): the decision's masked-history
+ * fallback stands whatever the budget — or a manual focus request — says, so a compaction never
+ * touches a model. Unlike a rejected checkpoint this is not a failure: there is no
+ * `checkpointRejection` to report, because nothing was attempted.
+ */
+export function runMaskOnly(snapshot: ConversationSnapshot, budget: BudgetPolicy, options: MaskOptions = {}): Outcome {
+  const decision = decide(snapshot, budget, options)
+  return decision.kind === 'checkpoint-requested' ? decision.fallback : decision
+}

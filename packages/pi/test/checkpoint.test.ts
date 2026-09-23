@@ -116,3 +116,23 @@ describe('planCompaction — a checkpoint call that is not accepted', () => {
     expect(effect.checkpointRejection).toBe('provider-error')
   })
 })
+
+describe('planCompaction — the checkpoint call switched off (`checkpointEnabled: false`)', () => {
+  it('returns masked history over budget without touching the model, recording no rejection', async () => {
+    const complete = vi.fn()
+    const ctx = { ...fakeContext(), modelRegistry: { complete } }
+    const effect = native(
+      await planCompaction(beforeCompact(firstTurn(), 'u2'), ctx, {
+        budget: { compactBudgetTokens: 1 },
+        checkpointEnabled: false,
+      }),
+    )
+    expect(complete).not.toHaveBeenCalled()
+    expect(effect.detail.strategy).toBe('mask')
+    expect(effect.detail.checkpoints).toBe(0)
+    expect(effect.usage).toBeUndefined()
+    expect(effect.piUsage).toBeUndefined()
+    expect(effect.checkpointRejection).toBeUndefined()
+    expect(effect.summary).not.toContain('BODY-1')
+  })
+})

@@ -8,7 +8,7 @@ export { estimateTokens } from './estimate.js'
 export { HISTORY_FRAMING, roleLabel } from './framing.js'
 export type { MaskOptions, MaskStats } from './mask.js'
 export { MaskingError, maskItems, maskSpan } from './mask.js'
-export { run } from './run.js'
+export { run, runMaskOnly } from './run.js'
 export type {
   Artifact,
   ArtifactSection,

@@ -59,6 +59,11 @@ export const CHANNELS: Record<keyof EngineConfig, Channels> = {
     flag: 'maskpoint-checkpoint-model',
     description: 'Maskpoint: model id for the checkpoint call. Accepted and validated, but not yet used: a checkpoint runs on the session model',
   },
+  checkpointEnabled: {
+    env: 'MASKPOINT_CHECKPOINT_ENABLED',
+    flag: 'maskpoint-checkpoint-enabled',
+    description: 'Maskpoint: set to false to refuse the checkpoint call — an over-budget candidate stays masked history however large, so a compaction never touches a model (default true)',
+  },
   maskReasoning: {
     env: 'MASKPOINT_MASK_REASONING',
     flag: 'maskpoint-mask-reasoning',
@@ -127,6 +132,7 @@ function coerce(field: keyof EngineConfig, value: unknown): unknown {
     case 'compactBudgetTokens':
       return /^\d+$/.test(value) ? Number(value) : value
     case 'maskReasoning':
+    case 'checkpointEnabled':
       return coerce('enabled', value)
     default:
       return value
@@ -181,7 +187,7 @@ function hostExplicit(host: unknown): Set<string> {
 const DEPRECATED_KEY_ALIASES: Readonly<Record<string, string>> = { checkpointTriggerTokens: 'compactBudgetTokens' }
 
 /** Every field, for provenance walks. */
-const ALL_FIELDS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'maskReasoning', 'notificationLevel']
+const ALL_FIELDS: readonly (keyof EngineConfig)[] = ['enabled', 'compactBudgetTokens', 'checkpointModel', 'checkpointEnabled', 'maskReasoning', 'notificationLevel']
 
 /** How each layer names itself when `/maskpoint` reports where a value came from. */
 const LAYER_NAMES: readonly string[] = ['host configuration', 'stored configuration', 'environment', 'flag']

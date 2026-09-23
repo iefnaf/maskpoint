@@ -10,10 +10,10 @@ describe('resolveEngineConfig', () => {
 
   it('applies a valid global layer over the defaults', () => {
     const { config, warnings } = resolveEngineConfig({
-      global: { enabled: false, compactBudgetTokens: 8_000, checkpointModel: 'gpt-5', maskReasoning: true, notificationLevel: 'verbose' },
+      global: { enabled: false, compactBudgetTokens: 8_000, checkpointModel: 'gpt-5', checkpointEnabled: false, maskReasoning: true, notificationLevel: 'verbose' },
       projectTrusted: false,
     })
-    expect(config).toEqual({ enabled: false, compactBudgetTokens: 8_000, checkpointModel: 'gpt-5', maskReasoning: true, notificationLevel: 'verbose' })
+    expect(config).toEqual({ enabled: false, compactBudgetTokens: 8_000, checkpointModel: 'gpt-5', checkpointEnabled: false, maskReasoning: true, notificationLevel: 'verbose' })
     expect(warnings).toEqual([])
   })
 
@@ -28,6 +28,7 @@ describe('resolveEngineConfig', () => {
     ['checkpointModel', 42],
     ['notificationLevel', 'loud'],
     ['maskReasoning', 'yes'],
+    ['checkpointEnabled', 'yes'],
   ])('falls back to the default and warns when global "%s" is %j', (field, value) => {
     const { config, warnings } = resolveEngineConfig({ global: { [field]: value }, projectTrusted: false })
     expect(config).toEqual(DEFAULT_ENGINE_CONFIG)
@@ -113,7 +114,7 @@ describe('resolveEngineConfigLayers', () => {
         throw new Error('should not warn')
       },
     )
-    expect(config).toEqual({ enabled: false, compactBudgetTokens: 20_000, maskReasoning: false, notificationLevel: 'silent' })
+    expect(config).toEqual({ enabled: false, compactBudgetTokens: 20_000, checkpointEnabled: true, maskReasoning: false, notificationLevel: 'silent' })
   })
 
   it('names the layer in every warning, so the operator knows which surface to fix', () => {

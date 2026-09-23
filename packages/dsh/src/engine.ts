@@ -1,4 +1,4 @@
-import { budgetOf, type EngineConfig, type MaskOptions, maskOptionsOf, run } from '@maskpoint/core'
+import { budgetOf, type EngineConfig, type MaskOptions, maskOptionsOf, run, runMaskOnly } from '@maskpoint/core'
 import type { BudgetPolicy, CapabilityProfile } from '@maskpoint/core'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -64,6 +64,8 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
   protected readonly budget: BudgetPolicy
   /** Mask behaviour derived from `maskpointConfig`: whether reasoning is masked as well as observations. */
   protected readonly maskOptions: MaskOptions
+  /** Whether a compaction may make its one checkpoint call, straight from `maskpointConfig`. */
+  protected readonly checkpointEnabled: boolean
 
   constructor(ctx: Context, config?: MaskpointDshConfig) {
     const { base, own } = splitDshConfig(config as Record<string, unknown> | undefined)
@@ -71,6 +73,7 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
     this.maskpointConfig = resolveDshConfig(own, (message) => ctx.logger.warn(`maskpoint: config: ${message}`))
     this.budget = budgetOf(this.maskpointConfig)
     this.maskOptions = maskOptionsOf(this.maskpointConfig)
+    this.checkpointEnabled = this.maskpointConfig.checkpointEnabled
   }
 
   /**
@@ -185,7 +188,11 @@ export class MaskpointCompactionEngine extends BasicCompactionEngine {
       signal: cancellation,
     })
 
-    const outcome = await run(snapshot, this.budget, deps, this.maskOptions)
+    // The deps are built either way — they only close over the host — but with the checkpoint call
+    // switched off the engine entry that would use them is never taken.
+    const outcome = this.checkpointEnabled
+      ? await run(snapshot, this.budget, deps, this.maskOptions)
+      : runMaskOnly(snapshot, this.budget, this.maskOptions)
     if (outcome.kind === 'decline') {
       // A decline is the engine saying this region cannot be trusted or is empty. The host's
       // transaction closes the attempt and reports it as its `summary` failure, unchanged history.

@@ -22,6 +22,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
           MASKPOINT_ENABLED: 'false',
           MASKPOINT_COMPACT_BUDGET_TOKENS: '20000',
           MASKPOINT_CHECKPOINT_MODEL: 'glm-4.6',
+          MASKPOINT_CHECKPOINT_ENABLED: 'false',
           MASKPOINT_MASK_REASONING: 'true',
           MASKPOINT_NOTIFICATION_LEVEL: 'verbose',
         },
@@ -32,6 +33,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       enabled: false,
       compactBudgetTokens: 20_000,
       checkpointModel: 'glm-4.6',
+      checkpointEnabled: false,
       maskReasoning: true,
       notificationLevel: 'verbose',
     })
@@ -46,6 +48,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
           enabled: true,
           compactBudgetTokens: '9000',
           checkpointModel: 'glm-4.6',
+          checkpointEnabled: false,
           maskReasoning: true,
           notificationLevel: 'silent',
         },
@@ -56,6 +59,7 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
       enabled: true,
       compactBudgetTokens: 9_000,
       checkpointModel: 'glm-4.6',
+      checkpointEnabled: false,
       maskReasoning: true,
       notificationLevel: 'silent',
     })
@@ -66,6 +70,8 @@ describe('loadConfig — the channels Pi leaves an extension', () => {
     const { warn } = collecting()
     expect(loadConfig({ env: { MASKPOINT_ENABLED: 'true' } }, warn).enabled).toBe(true)
     expect(loadConfig({ env: { MASKPOINT_ENABLED: '0' } }, warn).enabled).toBe(false)
+    expect(loadConfig({ env: { MASKPOINT_CHECKPOINT_ENABLED: '1' } }, warn).checkpointEnabled).toBe(true)
+    expect(loadConfig({ env: { MASKPOINT_CHECKPOINT_ENABLED: 'false' } }, warn).checkpointEnabled).toBe(false)
   })
 
   it('applies host, environment and flag in escalating order', () => {
@@ -143,6 +149,7 @@ describe('flagSpecs', () => {
   it('names one flag per setting, each with a description an operator can act on, plus the deprecated renames', () => {
     const specs = flagSpecs()
     expect(specs.map((spec) => spec.name).sort()).toEqual([
+      'maskpoint-checkpoint-enabled',
       'maskpoint-checkpoint-model',
       'maskpoint-checkpoint-trigger-tokens',
       'maskpoint-compact-budget-tokens',

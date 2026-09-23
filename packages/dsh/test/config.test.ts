@@ -10,7 +10,7 @@ describe('the maskpoint row config (issue #8)', () => {
     await ctx.plugin(MaskpointCompactionEngine, { auto: false })
     expect(ctx.compaction).toBeInstanceOf(MaskpointCompactionEngine)
     const engine = ctx.compaction as MaskpointCompactionEngine
-    expect(engine.maskpointConfig).toEqual({ enabled: true, compactBudgetTokens: 24_000, maskReasoning: false, notificationLevel: 'normal' })
+    expect(engine.maskpointConfig).toEqual({ enabled: true, compactBudgetTokens: 24_000, checkpointEnabled: true, maskReasoning: false, notificationLevel: 'normal' })
   })
 
   it('lowers the checkpoint trigger from the row config, changing masking into a checkpoint end to end', async () => {

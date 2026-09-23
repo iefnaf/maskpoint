@@ -87,6 +87,20 @@ describe('runMaskpointCommand', () => {
     expect(resolveConfig({ stored: store.read() }, quiet()).config.maskReasoning).toBe(true)
   })
 
+  it('switches the checkpoint call off and on, and the listing reports it', async () => {
+    const off = await run('checkpoint off', {})
+    expect(off.message).toBe('Maskpoint: checkpoint off — stored, applies to the next compaction')
+    expect(off.store.read()).toEqual({ checkpointEnabled: false })
+    expect(resolveConfig({ stored: off.store.read() }, quiet()).config.checkpointEnabled).toBe(false)
+
+    const notes: { message: string; level: string }[] = []
+    const shown = await run('', { stored: off.store.read() }, notes)
+    expect(shown.message).toMatch(/checkpoint off \(stored configuration\)/)
+
+    const on = await run('checkpoint on', { stored: { checkpointEnabled: false } })
+    expect(on.store.read()).toEqual({ checkpointEnabled: true })
+  })
+
   it('rejects a bad value with the reason, and writes nothing', async () => {
     const { notes, message } = await run('budget lots', {})
     expect(message).toBe('Maskpoint: budget lots — use a whole number of tokens, or "auto" for the window-derived default')
