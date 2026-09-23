@@ -76,7 +76,28 @@ What this does *not* claim: downstream quality at larger artifacts is unmeasured
 compared reasoning masking, not artifact size); and the corpus is one machine's usage — 42 events,
 three window classes. The knobs exist precisely so this can be retuned without a release.
 
-## 4. Correction to an earlier number
+## 4. Interaction with reasoning masking
+
+The reasoning evaluation measured reasoning at 36.8 % of the residual over **all** sessions — but
+that average is diluted by small sessions. At the 42 real compaction events, which are by
+selection long sessions on thinking models, reasoning is the **dominant residual bucket: a median
+68 %** of the candidate (largest event: thinking 102.8k of a 152k residual). Re-measuring the same
+events with reasoning masked under the engine's rules:
+
+| window class | LLM trigger, reasoning kept | LLM trigger, reasoning masked |
+|---|---:|---:|
+| 1M (glm-5.3 class) | 60 % | **0 %** |
+| 272k | 29 % | **0 %** |
+| 200k/128k | 33 % | **0 %** |
+| all 42 events | 38 % | **0 %** |
+
+Every real event's candidate fits even the 24k floor budget once reasoning is masked (median
+candidate ≈ 13k, p75 ≈ 17k). This materially strengthens the case for `maskReasoning` — and
+weakens the original reason it ships off (checkpoint quality from stubbed reasoning is untested,
+but with a 0 % trigger rate that path is simply not taken). The downstream-continuation risk was
+measured as nil in the A/B. Flipping the default is issue-tracked, not done here.
+
+## 5. Correction to an earlier number
 
 `docs/reasoning-masking-evaluation.md` reported "the default budget of 12,000 makes 50.4 % of
 first compactions mask-only". That number came from a one-shot simulation that forces **every**
@@ -100,3 +121,5 @@ measurement machine; the numbers, not the scripts, are the artifact):
    sessions that never really compacted.
 3. **Ground truth** (`real-events.mts`): the 42 real events; candidate = previous event's summary
    tokens + framing + masked span before the recorded boundary. Windows from the local Pi catalog.
+   The reasoning-masked variant re-measures each event with thinking blocks replaced under the
+   engine's placeholder and no-expansion rules.
