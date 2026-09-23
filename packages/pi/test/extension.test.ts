@@ -82,7 +82,7 @@ describe('the extension', () => {
     vi.unstubAllEnvs()
     const entries = [
       user('u1', 'Go.'),
-      assistant('a1', [thinking('I should read the file first, then edit it carefully.'), toolCall('c1', 'read', { path: '/w/a.ts' })]),
+      assistant('a1', [thinking('I should read the file first, then edit it carefully, and re-run the tests after each step so nothing regresses silently.'), toolCall('c1', 'read', { path: '/w/a.ts' })]),
       toolResult('r1', 'c1', 'read', bulky('BODY')),
       user('u2', 'Thanks.'),
       assistant('a2', [text('Done.')]),

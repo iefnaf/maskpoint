@@ -302,7 +302,7 @@ describe('maskItems — masking every body (alwaysMask)', () => {
     for (const id of ['s1', 's2']) {
       const masked = resultAt(items, id)
       expect(masked.masked).toBe(true)
-      expect(masked.text).toMatch(/^\[tool result omitted: bash, ok, 1 line, \d+ chars\]$/)
+      expect(masked.text).toMatch(/^\[tool result omitted: bash, ok, 1 line, \d+ chars \(recall id:s\d\)\]$/)
     }
     expect(JSON.stringify(items)).not.toContain('sk-live')
     expect(stats).toEqual({ observationsMasked: 2, charsOmitted: 2 + secret.length })
@@ -338,7 +338,7 @@ describe('maskItems — masking assistant reasoning (maskReasoning)', () => {
     const { items, stats } = maskItems([reasoning('r1', long)], { maskReasoning: true })
     const masked = items[0]
     expect(masked).toMatchObject({ id: 'r1', kind: 'assistant-reasoning' })
-    expect((masked as { text: string }).text).toMatch(/^\[reasoning omitted: 40 lines, \d+ chars\]$/)
+    expect((masked as { text: string }).text).toMatch(/^\[reasoning omitted: 40 lines, \d+ chars \(recall id:r1\)\]$/)
     expect((masked as { text: string }).text).not.toContain(BODY_HEAD)
     expect(stats.reasoningsMasked).toBe(1)
     expect(stats.observationsMasked).toBe(0)

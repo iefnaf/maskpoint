@@ -28,7 +28,7 @@ describe('planCompaction — what counts as an observation', () => {
     const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
     expect(effect.summary).toContain('Recorded tool call: bash')
     expect(effect.summary).toContain('npm test')
-    expect(effect.summary).toMatch(/\[tool result omitted: bash, error, exit 1, \d+ lines, \d+ chars\]/)
+    expect(effect.summary).toMatch(/\[tool result omitted: bash, error, exit 1, \d+ lines, \d+ chars \(recall id:\S+\)\]/)
     expect(effect.summary).not.toContain('BUILD-OUT')
   })
 
@@ -56,7 +56,7 @@ describe('planCompaction — what counts as an observation', () => {
       assistant('a3', [text('On it.')]),
     ]
     const effect = native(await planCompaction(beforeCompact(entries, 'u2'), fakeContext()))
-    expect(effect.summary).toContain('[tool result omitted: screenshot, ok, 2 images]')
+    expect(effect.summary).toMatch(/\[tool result omitted: screenshot, ok, 2 images \(recall id:\S+\)\]/)
     expect(effect.detail.stats.observationsMasked).toBe(1)
   })
 

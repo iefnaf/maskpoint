@@ -58,7 +58,7 @@ describe('automatic compaction (compactIfNeeded, pressure)', () => {
     expect(replacement.sourceEventSeqs).toEqual([observationSeqs[0]])
 
     // The oldest observation is masked; the one inside the retained window is verbatim.
-    expect(JSON.stringify(replacement.data.message)).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars\]/)
+    expect(JSON.stringify(replacement.data.message)).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars \(recall id:\S+\)\]/)
     expect(JSON.stringify(replacement.data.message)).not.toContain('line of build output')
     expect(isVerbatim(session, observationSeqs[2]!)).toBe(true)
 
@@ -244,7 +244,7 @@ describe('image observations', () => {
     if (event?.type !== 'tool/result') throw new Error('the image observation was not replaced')
     const body = JSON.stringify(event.data.message)
     expect(body).not.toContain('"type":"image"')
-    expect(body).toContain('[tool result omitted: screenshot, ok, 1 image]')
+    expect(body).toMatch(/\[tool result omitted: screenshot, ok, 1 image \(recall id:\S+\)\]/)
     const after = accounting(ctx, session)
     expect(after.breakdownMessages).toBe(after.surface)
     expect(after.total).toBeLessThan(before.total)
