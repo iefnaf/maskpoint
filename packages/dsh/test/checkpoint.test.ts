@@ -188,7 +188,7 @@ describe('checkpoint rejection falls back to masked history', () => {
     expect(text).not.toContain('cut off mid-sente')
     expect(text).not.toContain('User context and constraints')
     // Never empty: the observations are still there, as placeholders.
-    expect(text).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars\]/)
+    expect(text).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars \(recall id:\S+\)\]/)
   })
 })
 
@@ -242,7 +242,7 @@ describe('further checkpoint rejections', () => {
     expect(calls).toHaveLength(0)
     const summary = summaryOf(session, result!)
     expect({ provider: summary.provider, model: summary.model }).toEqual({ provider: 'maskpoint', model: 'mask-only' })
-    expect(surfaceText(session)).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars\]/)
+    expect(surfaceText(session)).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars \(recall id:\S+\)\]/)
   })
 
   it('rejects an image checkpoint response, the same as the host itself, and falls back to masked history', async () => {

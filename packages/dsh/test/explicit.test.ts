@@ -41,7 +41,7 @@ describe('explicit idle-session compaction (compactNow)', () => {
     expect(text).toContain('please run step 1 and report')
     expect(text).toContain('please run step 3 and report')
     expect(text).toContain('{"cmd":"make"}')
-    expect(text).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars\]/)
+    expect(text).toMatch(/\[tool result omitted: bash, ok, 200 lines, \d+ chars \(recall id:\S+\)\]/)
 
     // Host accounting: the priced surface, the meter total and both replay projections agree, and the
     // total fell by exactly the priced delta.

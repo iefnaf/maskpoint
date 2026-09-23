@@ -1,14 +1,17 @@
 # Maskpoint
 
-Portable hybrid context compaction for coding agents: **deterministic observation masking first, one
-LLM checkpoint as a last resort.**
+Portable hybrid context compaction for coding agents: **deterministic observation masking first,
+one LLM checkpoint as a last resort, and the masked originals one `recall` call away.**
 
 When a host compacts, Maskpoint replaces stale tool output with short placeholders instead of asking
 a model to summarize it. A model is called only when the accumulated masked history crosses a token
-budget, or when you asked `/compact` for a focus.
+budget, or when you asked `/compact` for a focus. And nothing is gone: every placeholder names the
+session entry it replaced, and the `recall` tool recovers the verbatim original on demand
+([`docs/recall-tool.md`](docs/recall-tool.md)).
 
 ```
-read, 260 lines            →  [tool result omitted: read, ok, 260 lines, 31304 chars]
+read, 260 lines   →  [tool result omitted: read, ok, 260 lines, 31304 chars (recall id:39f65e5a)]
+                                                                 recovered verbatim via recall ↗
 ```
 
 Nothing about the result depends on a model's willingness to preserve a file path: masking is
@@ -64,6 +67,7 @@ install path is the one each package documents:
 | [`docs/spec.md`](docs/spec.md) | Problem, user stories, implementation decisions, testing decisions, out of scope |
 | [`docs/design.md`](docs/design.md) | Interfaces, algorithms, per-adapter designs, failure matrix, quality bars, open issues |
 | [`docs/calibration-report.md`](docs/calibration-report.md) | The internal token estimator against DSH's own meter, over the shared corpus |
+| [`docs/recall-tool.md`](docs/recall-tool.md) | The `recall` tool: recovering masked content on demand — design, experiments, non-goals |
 
 The research basis is *The Complexity Trap: Simple Observation Masking Is as Efficient as LLM
 Summarization for Agent Context Management* (arXiv:2508.21433); this project's own numbers, not the

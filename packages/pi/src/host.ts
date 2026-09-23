@@ -136,6 +136,8 @@ export interface PiContext {
   /** The session's active model. Absent when none is configured or authenticated. */
   model: PiModel | undefined
   modelRegistry: PiModelRegistry
+  /** Read-only session state. Absent when the host hands a context without one (older releases). */
+  sessionManager?: PiSessionManager
   /**
    * This extension's own settings, however Pi's runtime supplies them for an installed extension
    * (issue #8, `config.ts`). Absent when the host passes none, which is every Pi release measured
@@ -155,6 +157,41 @@ export interface PiFlagOptions {
   default?: string
 }
 
+/**
+ * Read-only session state, as far as this package uses it: the raw entry list, compaction entries
+ * still in place (`buildContextEntries` is what applies compaction — `getEntries` never does), and
+ * the session file path for messages. Typed structurally and left loose deliberately: nothing in
+ * this package can validate what a real Pi release actually sends.
+ */
+export interface PiSessionManager {
+  getEntries(): readonly unknown[]
+  getBranch(): readonly unknown[]
+  getSessionFile(): string | undefined
+}
+
+/**
+ * A tool registration. `parameters` is a JSON-schema object — the same thing a TypeBox
+ * `Type.Object` produces, spelled out so this package carries no schema-library dependency.
+ */
+export interface PiToolRegistration {
+  name: string
+  label?: string
+  description?: string
+  parameters?: unknown
+  execute(
+    toolCallId: string,
+    params: unknown,
+    signal: AbortSignal,
+    onUpdate: ((update: string) => void) | undefined,
+    ctx: PiContext | undefined,
+  ): Promise<PiToolResult>
+}
+
+/** What `execute` resolves to: content blocks, at least one of text. */
+export interface PiToolResult {
+  content: { type: 'text'; text: string }[]
+}
+
 export interface PiExtensionApi {
   on(
     event: 'session_before_compact',
@@ -166,6 +203,11 @@ export interface PiExtensionApi {
   getFlag(name: string): boolean | string | undefined
   /** Register a `/slash` command, so it appears in the command palette. `args` is the raw text after the name. */
   registerCommand(name: string, options: PiCommandOptions): unknown
+  /**
+   * Register an agent-facing tool. Absent on host releases without extension tools — callers must
+   * check before using it, and lose only the tool, never the compaction.
+   */
+  registerTool?(tool: PiToolRegistration): unknown
 }
 
 /** A `/maskpoint` subcommand registration: what it is, and what runs when the user types it. */

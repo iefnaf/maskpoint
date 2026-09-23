@@ -227,7 +227,7 @@ interface EngineDeps {
 - **Reasoning is masked only on request** (`MaskOptions.maskReasoning`, default off). The default follows requirement 9: the rationale behind the work is the part of a long session that only exists in prose, and the corpus shows it is not a restatement of the outcome — 74.1% of reasoning blocks hold at least one lookup-worthy identifier that appears nowhere else in what survives masking. When an operator opts in, reasoning outside the boundary becomes `[reasoning omitted: N lines, M chars]` under the same two rules as an observation (no expansion, no re-wrapping), and the count lands in `Stats.reasoningsMasked`. The measurement behind the trade-off — continuation unchanged, state recall better without reasoning, prompt tokens a third — is [`docs/reasoning-masking-evaluation.md`](reasoning-masking-evaluation.md); the checkpoint path is untested, which is why the default is off. **Rejected for now: a recency window inside the span** (\"keep the last K turns of reasoning\"), for the same accumulation reason as above — whatever stays verbatim becomes carried state that is never re-masked, so it would grow with every compaction instead of once.
 - **No-expansion rule.** An observation stays verbatim when its placeholder would not be smaller, compared with the same estimator the budget uses. This is a compression-safety rule, not a recency rule, and it is what keeps masking from ever increasing context.
 - **Idempotence.** Masking an already-masked placeholder is a no-op, and placeholders that were produced by a host-side pruner are recognized rather than re-wrapped. Required because DSH may mount its own deterministic pruner alongside Maskpoint.
-- **Placeholder contents:** tool name when known, status, exit code when known, omitted lines and characters, omitted image count. Never the body, never a prefix or suffix of it.
+- **Placeholder contents:** tool name when known, status, exit code when known, omitted lines and characters, omitted image count, and the recall anchor `(recall id:<entry id>)`. Never the body, never a prefix or suffix of it. The anchor names the session entry (an adapter's sub-item suffix is dropped), stays stable across compactions and resume, and is what the [`recall`](#recall) tool resolves — the design and the measured behaviour live in [`docs/recall-tool.md`](recall-tool.md). Its ~10 characters are honest cost: the no-expansion rule compares placeholder-with-anchor against the body, so a body barely worth masking before the anchor stays verbatim now.
 - **Media** observations lose their payload and keep text metadata; images are the single worst context-per-information item in a long session.
 - **Shell actions.** For hosts that express a command as part of the observation, the command is preserved as a tool call and only the output is masked.
 - **Ordering and provenance.** Masked history preserves chronological order and labels roles explicitly, written so that recorded user and tool content reads as historical record rather than as an instruction the model should now follow.
@@ -250,6 +250,30 @@ interface EngineDeps {
 - The unit is tokens, not turns, because the paper's turn-count parameters were calibrated for a different scaffold and do not transfer. The paper's turn window maps onto the host's retained region; its summary interval maps onto this budget.
 - The default is **derived from the model's context window** when the adapter can see one: a quarter of the window, clamped to [24,000, 96,000] (`deriveCompactBudget`); the flat fallback when it cannot is 24,000. These are measured tuning parameters, not derived constants — the calibration, the real-event coverage curves behind them, and the correction of the earlier 12,000-token default live in `docs/budget-calibration.md`. A pre-rename `checkpointTriggerTokens` key (and, on Pi, its `MASKPOINT_CHECKPOINT_TRIGGER_TOKENS` / `--maskpoint-checkpoint-trigger-tokens` channels) is still accepted with a deprecation warning.
 - The estimator is deliberately conservative, weighting CJK text above its character count, so that non-English sessions cannot silently exceed the budget. Calibration against host-provided meters is an open issue.
+
+### Recall
+
+The inverse of the mask primitive, agent-initiated only. A placeholder's anchor `(recall id:…)` is
+a door: the model passes the id and gets the entry's body back, verbatim, bounded. Full design,
+experiments, and non-goals in [`docs/recall-tool.md`](recall-tool.md).
+
+- **Core is pure functions over normalized items** (`recall.ts`): resolve an id (exact entry id,
+composed sub-item id, or unique tail; a hint-polluted `id:`/`e:` prefix is stripped — the measured
+failure mode of bare anchors), search masked kinds by substring or `/regex/`, and render under
+budget. Nothing host-shaped crosses into core.
+- **Scope is the masked span**: entries before the most recent compaction boundary. What follows the
+boundary is already in context; recovering it would only duplicate. A session that never compacted
+answers "nothing compacted to recover".
+- **Recovered content is on loan**: recall output is ordinary context with no compaction privilege,
+prefaced with the same history-not-instructions framing the artifact carries. The next compaction
+masks it again like anything else — the original never moves, so the anchor opens again.
+- **Budgets are the tool's own guard**: search results share ~4k chars, one entry in `full` mode is
+hard-capped at ~50k and pages via the clip marker, which names the id and the next page. Recall must
+never become the context bomb it exists to defuse. Constants, not configuration, until a measured
+need appears.
+- **Pi wiring reads memory, not files**: `getEntries()` returns the raw entries with compaction not
+applied, so the tool costs one array pass. Hosts without a tools surface for extensions lose the
+tool, never the compaction.
 
 ### Checkpoint
 
@@ -282,6 +306,8 @@ The result must **strictly shrink** context: the rendered summary is compared wi
 **As built (#7, checkpoints, focus, and file-op carryover).** The "latest compatible details" step scans the branch's compaction entries from the cut backward and reconstructs `EngineDetail` field by field, so a shape this adapter did not write — Pi's own `details`, an older or newer version, another engine, a malformed field — comes back absent rather than partially parsed, per the design's "Missing, malformed, older-version, or foreign compaction details are treated as absent" rule. This reaches past a compaction Pi's own compactor made in between, which is why the checkpoint count and file lists survive even when Pi wrote the most recent summary. File operations `preparation.fileOps` reports for the span just compacted are merged (union, first-seen order) with the earlier lists via `mergeFileOps`; Pi does not fold a hook-written compaction's details into what it tracks next, so this is the only path a checkpoint count or a read/written/edited path survives across a Maskpoint compaction.
 
 The checkpoint call goes through `ctx.modelRegistry.complete` with the session's active model (there is no per-checkpoint model configuration yet); a missing model, a provider error, an abort, a length stop, a tool call, or an empty reply all fall back to the masked history the call was meant to condense, never to a decline, per the design's failure table. Custom instructions force the call even within budget, and reach the model as an appended instruction, never replacing the fixed checkpoint format. `checkpointRejection` on the returned effect and the extension's announcement say when a checkpoint was attempted and not accepted, so an over-budget session that could not get a checkpoint is never silently mistaken for one that did.
+
+**The `recall` tool (issue #53).** The extension registers an agent-facing `recall` tool on hosts that expose `registerTool`, whenever the stored config leaves the engine on. It answers with the verbatim body behind a placeholder's `(recall id:…)` anchor, scoped to the entries before the most recent compaction (`getEntries()`, compaction not applied — no file reads), behind the not-instructions preface and the budgets of the engine's pure recall functions. Accepted end to end on a real 390k-token session: 340 anchors in the compaction summary, the model called `recall` unprompted with an exact id, and quoted the recovered lines verbatim. Hosts without extension tools lose the tool, never the compaction; see [`docs/recall-tool.md`](recall-tool.md) for the design.
 
 ### DSH
 

@@ -21,7 +21,7 @@ describe('planCompaction — a first compaction', () => {
     expect(effect.summary).toContain('There are forty usages across the app.')
     expect(effect.summary).toContain('Recorded tool call: grep')
     expect(effect.summary).toContain('/workspace/app')
-    expect(effect.summary).toMatch(/\[tool result omitted: grep, ok, \d+ lines, \d+ chars\]/)
+    expect(effect.summary).toMatch(/\[tool result omitted: grep, ok, \d+ lines, \d+ chars \(recall id:\S+\)\]/)
     expect(effect.summary).not.toContain('BODY-1')
   })
 

@@ -5,6 +5,7 @@ import { runMaskpointCommand } from './command.js'
 import { planCompaction, type PiEffect, toPiResult } from './compact.js'
 import { flagSpecs, loadConfig, readFlags, resolveConfig } from './config.js'
 import { StoredConfig } from './storage.js'
+import { registerRecallTool } from './tool.js'
 import type { PiBeforeCompactEvent, PiCompactionResult, PiContext, PiExtensionApi } from './host.js'
 
 /** One line saying what happened, in the statistics' own words. Structure and counts only, never content. */
@@ -51,6 +52,13 @@ export default function maskpoint(pi: PiExtensionApi): void {
   // the persistent surface Pi itself never gave an extension (issue #39); `MASKPOINT_CONFIG`
   // points it elsewhere for profiles and tests.
   const store = new StoredConfig(process.env.MASKPOINT_CONFIG ?? join(homedir(), '.pi', 'agent', 'maskpoint.json'))
+
+  // The agent-facing inverse of the mask primitive: placeholders carry (recall id:…) and the tool
+  // answers with the entry behind them. Registered whenever the stored config leaves the engine
+  // on, so a disabled Maskpoint adds no tool to the model's list. CLI flags are not read here: Pi
+  // parses them after this factory returns (measured, issue #39), so a flag-disabled session keeps
+  // the tool — harmless, since nothing is masked and every call answers "nothing compacted".
+  if (resolveConfig({ env: process.env, stored: store.read() }, () => {}).config.enabled) registerRecallTool(pi)
 
   // The interactive surface for every setting (issue #48): shows the effective config with where
   // each value came from, or edits the stored file — which the next compaction reads, so a change

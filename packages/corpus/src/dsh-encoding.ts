@@ -82,11 +82,20 @@ export function buildDshMessages(snapshot: ConversationSnapshot): { messages: Me
     })
   }
 
-  let n = 0
+  // The same id scheme the Pi encoder assigns (`entry-<n>` over every non-checkpoint item, whole
+  // snapshot, in order) — the anchors masking embeds (`recall id:<entry id>`) then carry identical
+  // ids through both adapters and parity stays byte-exact.
+  const entryIdOf = new Map<string, string>()
+  {
+    let n = 0
+    for (const item of items) {
+      if (item.kind !== 'checkpoint') entryIdOf.set(item.id, `entry-${n++}`)
+    }
+  }
   for (let index = represented + 1; index < boundary; index++) {
     const item = items[index]!
     if (item.kind === 'checkpoint') continue // represented by the checkpoint message above, if any
-    messages.push(messageFor(item, `msg-${n++}`))
+    messages.push(messageFor(item, entryIdOf.get(item.id)!))
   }
 
   return { messages: messages as unknown as Message[] }

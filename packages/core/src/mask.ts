@@ -40,6 +40,19 @@ const REASONING_PLACEHOLDER = /^\[reasoning omitted: [^\]\n]*\]$/
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
 
+/**
+ * The id an anchor names: the session entry, not the sub-item — adapters compose sub-item ids as
+ * `entry#n`, and the anchor must stay stable however many items one entry yields.
+ */
+const entryIdOf = (id: string): string => id.split('#', 1)[0] ?? id
+
+/**
+ * The door in a placeholder: the tool name and the entry id to pass it. Self-describing on
+ * purpose — measured in `docs/recall-tool.md` §3, a bare `e:`-style anchor fails by prefix
+ * pollution, while `(recall id:...)` is called exactly, first try.
+ */
+const anchorFor = (item: { id: string }): string => ` (recall id:${entryIdOf(item.id)})`
+
 /** Characters as a reader counts them (code points), not UTF-16 units. */
 function countChars(text: string): number {
   let count = 0
@@ -65,14 +78,14 @@ function placeholderFor(item: ToolResultItem, omitted: string | undefined, media
   if (item.exitCode !== undefined) fields.push(`exit ${item.exitCode}`)
   if (omitted !== undefined) fields.push(plural(countLines(omitted), 'line'), plural(countChars(omitted), 'char'))
   if (media > 0) fields.push(plural(media, 'image'))
-  return `[tool result omitted: ${fields.join(', ')}]`
+  return `[tool result omitted: ${fields.join(', ')}${anchorFor(item)}]`
 }
 
 const replaced = (item: ToolResultItem, text: string): ToolResultItem => ({ ...item, text, media: 0, masked: true })
 
 /** The line a masked reasoning block leaves behind: how much of it there was, never any of what it said. */
-function reasoningPlaceholder(text: string): string {
-  return `[reasoning omitted: ${plural(countLines(text), 'line')}, ${plural(countChars(text), 'char')}]`
+function reasoningPlaceholder(item: Extract<Item, { kind: 'assistant-reasoning' }>): string {
+  return `[reasoning omitted: ${plural(countLines(item.text ?? ''), 'line')}, ${plural(countChars(item.text ?? ''), 'char')}${anchorFor(item)}]`
 }
 
 /**
@@ -83,7 +96,7 @@ function maskReasoning(item: Item, options: MaskOptions): { item: Item; charsOmi
   if (options.maskReasoning !== true || item.kind !== 'assistant-reasoning') return undefined
   const body = item.text ?? ''
   if (body === '' || REASONING_PLACEHOLDER.test(body)) return undefined
-  const placeholder = reasoningPlaceholder(body)
+  const placeholder = reasoningPlaceholder(item)
   if (estimateTokens(placeholder) >= estimateTokens(body)) return undefined
   return { item: { ...item, text: placeholder }, charsOmitted: countChars(body) }
 }

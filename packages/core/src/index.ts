@@ -9,6 +9,17 @@ export { HISTORY_FRAMING, roleLabel } from './framing.js'
 export type { MaskOptions, MaskStats } from './mask.js'
 export { MaskingError, maskItems, maskSpan } from './mask.js'
 export { run, runMaskOnly } from './run.js'
+export {
+  entryIdOf,
+  normalizeRecallId,
+  recallById,
+  RECALL_FULL_CAP_CHARS,
+  RECALL_SEARCH_BUDGET_CHARS,
+  renderRecallEntry,
+  renderRecallSearch,
+  searchRecall,
+  type RecallLookup,
+} from './recall.js'
 export type {
   Artifact,
   ArtifactSection,
