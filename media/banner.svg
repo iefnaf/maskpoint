@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">Maskpoint compresses stale tool output and keeps a path back</title>
+  <desc id="desc">Before compaction, the context contains a large tool result. Maskpoint keeps the instruction and tool call, replaces the result with a small placeholder, and leaves a recall id that can recover the original verbatim on demand.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#71717a"/>
+    </marker>
+    <style>
+      text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .label { fill:#71717a; font-size:12px; font-weight:700; letter-spacing:1.4px; }
+      .body { fill:#52525b; font-size:12px; }
+      .code { fill:#27272a; font-size:12px; }
+      .tiny { fill:#a1a1aa; font-size:10px; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="340" rx="18" fill="#f7f7f5"/>
+  <rect x=".5" y=".5" width="1199" height="339" rx="17.5" fill="none" stroke="#d4d4d4"/>
+
+  <!-- Before -->
+  <text class="label" x="50" y="40">BEFORE · FULL HISTORY</text>
+  <rect x="50" y="56" width="430" height="208" rx="14" fill="#ffffff" stroke="#d4d4d8"/>
+
+  <rect x="70" y="78" width="390" height="34" rx="8" fill="#fafafa" stroke="#e4e4e7"/>
+  <circle cx="88" cy="95" r="4" fill="#a1a1aa"/>
+  <text class="body" x="102" y="99">user instruction</text>
+
+  <rect x="70" y="120" width="390" height="34" rx="8" fill="#fafafa" stroke="#e4e4e7"/>
+  <circle cx="88" cy="137" r="4" fill="#52525b"/>
+  <text class="code" x="102" y="141">read({ path: "auth.ts" })</text>
+
+  <rect x="70" y="162" width="390" height="80" rx="8" fill="#f4f4f5" stroke="#d4d4d8"/>
+  <text x="86" y="183" fill="#3f3f46" font-size="11" font-weight="700">TOOL RESULT · 260 LINES · 31,304 CHARS</text>
+  <rect x="86" y="197" width="326" height="5" rx="2.5" fill="#a1a1aa"/>
+  <rect x="86" y="209" width="286" height="5" rx="2.5" fill="#b4b4bb"/>
+  <rect x="86" y="221" width="346" height="5" rx="2.5" fill="#c7c7cc"/>
+
+  <!-- Mask operation -->
+  <path d="M496 160H704" fill="none" stroke="#a1a1aa" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <rect x="548" y="137" width="104" height="46" rx="23" fill="#e4e4e7" stroke="#a1a1aa"/>
+  <text x="600" y="165" text-anchor="middle" fill="#52525b" font-size="13" font-weight="700">MASK</text>
+
+  <!-- After -->
+  <text class="label" x="720" y="40">AFTER · COMPACT CONTEXT</text>
+  <rect x="720" y="56" width="430" height="208" rx="14" fill="#ffffff" stroke="#d4d4d8"/>
+
+  <rect x="740" y="78" width="390" height="34" rx="8" fill="#fafafa" stroke="#e4e4e7"/>
+  <circle cx="758" cy="95" r="4" fill="#a1a1aa"/>
+  <text class="body" x="772" y="99">user instruction</text>
+  <text class="tiny" x="1068" y="99">kept</text>
+
+  <rect x="740" y="120" width="390" height="34" rx="8" fill="#fafafa" stroke="#e4e4e7"/>
+  <circle cx="758" cy="137" r="4" fill="#52525b"/>
+  <text class="code" x="772" y="141">read({ path: "auth.ts" })</text>
+  <text class="tiny" x="1068" y="141">kept</text>
+
+  <rect x="740" y="162" width="390" height="80" rx="8" fill="#f4f4f5" stroke="#52525b"/>
+  <text x="756" y="184" fill="#3f3f46" font-size="11" font-weight="700">SMALL PLACEHOLDER</text>
+  <text class="code" x="756" y="204">[tool result omitted: read, ok, 260 lines,</text>
+  <text x="756" y="222" fill="#18181b" font-size="12">31304 chars (recall id:39f65e5a)]</text>
+
+  <!-- Recall loop -->
+  <path d="M935 242V302H270V250" fill="none" stroke="#52525b" stroke-width="1.8" stroke-dasharray="7 7" marker-end="url(#arrow)"/>
+  <rect x="442" y="282" width="316" height="40" rx="20" fill="#ffffff" stroke="#71717a"/>
+  <text x="600" y="307" text-anchor="middle" fill="#27272a" font-size="12" font-weight="700">recall(id) → verbatim original</text>
+</svg>
